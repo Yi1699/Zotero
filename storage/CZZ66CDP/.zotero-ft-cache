@@ -1,0 +1,625 @@
+COSMIC: Compress Satellite Images Efficiently via Diffusion Compensation
+Ziyuan Zhang1 Han Qiu1∗ Maosen Zhang1 Jun Liu1 Bin Chen2 Tianwei Zhang3 Hewu Li1 1 Tsinghua University, China 2 Harbin Institute of Technology, Shenzhen, China 3 Nanyang Technological University, Singapore
+{ziyuan-z23,zhangms24}@mails.tsinghua.edu.cn, {qiuhan,juneliu}@tsinghua.edu.cn chenbin2021@hit.edu.cn, tianwei.zhang@ntu.edu.sg, lihewu@cernet.edu.cn
+Abstract
+With the rapidly increasing number of satellites in space and their enhanced capabilities, the amount of earth observation images collected by satellites is exceeding the transmission limits of satellite-to-ground links. Although existing learned image compression solutions achieve remarkable performance by using a sophisticated encoder to extract fruitful features as compression and using a decoder to reconstruct, it is still hard to directly deploy those complex encoders on current satellites’ embedded GPUs with limited computing capability and power supply to compress images in orbit. In this paper, we propose COSMIC, a simple yet effective learned compression solution to transmit satellite images. We first design a lightweight encoder (i.e. reducing FLOPs by 2.6 ∼ 5×) on satellite to achieve a high image compression ratio to save satellite-to-ground links. Then, for reconstructions on the ground, to deal with the feature extraction ability degradation due to simplifying encoders, we propose a diffusion-based model to compensate image details when decoding. Our insight is that satellite’s earth observation photos are not just images but indeed multi-modal data with a nature of Text-to-Image pairing since they are collected with rich sensor data (e.g. coordinates, timestamp, etc.) that can be used as the condition for diffusion generation. Extensive experiments show that COSMIC outperforms state-of-the-art baselines on both perceptual and distortion metrics. The code is publicly available at https://github.com/Joanna-0421/COSMIC.
+1 Introduction
+The revival of the aerospace industry [19, 38], coupled with reduced costs of launching rockets [22], has fueled an exponential increase in the number of nanosatellites, resulting in massive growth in images collected in-orbit. For example, the Sentinel-3 missions can collect a maximum of 20 TB raw data on satellites (mainly earth observation images) every day [20]. However, the data transmission capability between satellites and ground stations has clear upper bounds [18, 45, 17]. This situation of the rapid growth of images collected by satellites versus the limited transmission capability to the ground requires effective image compression on satellites before transmission back to Earth.
+Current industrial compression solutions for satellite images rely on JPEG [48], JPEG2000 [46], or CCSDS123 [29] (e.g. satellite BilSAT-1 [56]). These solutions are outperformed by various learned compression methods [12] in various cases. Existing learned image compression methods [39, 36, 53] use sophisticated encoders to extract fruitful features and then use a decoder to decompress [32, 54].
+∗Corresponding author.
+38th Conference on Neural Information Processing Systems (NeurIPS 2024).
+arXiv:2410.01698v1 [eess.IV] 2 Oct 2024
+
+
+Although we notice a novel promising trend of deploying embedded GPUs on satellites in both academia [16, 17, 6, 45] and industry (e.g. satellite Phi-Sat-1 [25], Chaohu-1 [3], and Forest-1 [4]) which brings the potential opportunity of using learned compressors on satellites. It is still hard to directly adopt existing learned compression solutions for satellites since their sophisticated encoders are still too complex for GPUs on satellites (e.g. NVIDIA Jetson Xavier NX on Forest-1 [4]) which have limited computing capacity and power supply [1]. We have two insights to fill the above gaps. (1) We first design a lightweight encoder on satellites with a higher priority of compression ratio than feature extraction ability. (2) At the receiver’s end on the ground, we deal with this simple encoder’s feature extraction ability degradation by compensating image contents when decoding. We choose diffusion as compensation due to its powerful generation capability and, more importantly, satellites’ earth observation photos are not only images but enjoy a multi-modal nature in which rich real-time sensor information is the description of the corresponding photo. For instance, in Figure 1, the coordinates (e.g. latitude and longitude) denote the location of the image which describes its main category (e.g. sea, city, etc.) and the timestamp describes the image’s lightning-like day or night.
+Figure 1: An example of the satellite’s earth observation image and this image’s corresponding sensor data as a description.
+In this paper, we propose to COmpress Satellite iMage via dIffusion Compensation (COSMIC), a novel learned image compression method for satellites. COSMIC has two key components, i.e., (1) a lightweight encoder for compression on satellite and (2) a sophisticated decompression process with a decoder and a diffusion model on the ground with sufficient GPUs. First, we design a lightweight convolution architecture to extract local features and apply convolution to obtain an attention map of global features, to realize a lightweight image compression encoder in terms of FLOPs. Please note that lightweight encoders usually extract fewer key features which increases the difficulty for the decoder to decompress. Thus, our second component, decompression, has two parts including decoding with a corresponding decoder and, more importantly, a compensation model. Inspired by the multi-modal nature of the satellite’s images, we aim to build text-to-image pairs (image and its sensor information like Figure 1) and use diffusion as the compensation model.
+We compared COSMIC with 6 state-of-the-art (SOTA) baselines, 3 of which are based on generative models, considering both distortion and perceptual metrics. In addition, we constructed two image compression test sets based on satellite images by considering ordinary scenes and unique tile scenes in satellite imagery. Extensive experiments have proven that COSMIC significantly reduces the encoder’s complexity to 2.6 ∼ 5× fewer FLOPs while achieving better performance on almost all metrics than baselines. Our contributions can be summarized as follows.
+• We propose a novel idea that uses a lightweight image compression encoder on satellites and leverages satellite images’ text-to-image pairing nature for compensation when decompressing. • We propose a novel compensation model based on stable diffusion to compensate image details when decompressing with the unique sensor data of satellite images as descriptions. • We analyzed the characteristics of satellite images in detail and incorporated them into the training and inference stages. In addition, we constructed two datasets under satellite image transmission scenarios, taking into account the typical satellite image transmission tasks like tile scenes.
+2 Background
+2.1 Earth observation missions on satellites
+Earth observation missions (e.g. NASA’s Landsat Program [49]) involve the use of satellite photos to monitor and collect data for tasks like forestry [5], agriculture [14, 41], land degradation [15], land use and land cover [40], biodiversity [34], and water resource [35, 47]. Traditional earth observation missions rely on a pipeline in which satellites take photos and then send them back to ground stations for analysis. Recently, along with the rapid cost of launching rockets and manufacturing
+2
+
+
+nanosatellites [21, 6], the photos on satellites are rapidly increasing which brings novel challenges for transmitting photos back to the ground. A recent promising approach is to deploy embedded GPUs on satellites to support DNN models to either filter useless data before transmission or make partial processing tasks on satellites. For instance, ESA’s satellite Phi-Sat-1 [25] first deploy Intel VPU on satellite to support DNN models for filtering useless photos (e.g. covered by clouds) that can save 30%+ transmission volume. OroraTech has launched AI nanosatellites with the NVIDIA Jetson Xavier NX for wildfire detection [4], and Orbital Sidekick uses NVIDIA Jetson AGX Xavier as the AI engine at the edge of the satellite to detect gas pipeline leaks [2]. However, due to the inelastic computational capabilities of onboard satellites and limited power supply only from the sunshine (i.e., up to 15 Watt for GPUs on satellites [4]), a certain amount of images are still needed to be transmitted back to the ground. This brings an urgent need for satellite-specific image compression methods.
+2.2 Neural image compression methods
+Learned image compression methods have achieved remarkable rate-distortion performance compared with classical information theory-based image compression methods, to each of which consists of an encoder E, a quantization Q, and a decoder D. The encoder, as the most critical part, extracts key features from the image as the latent representation. Higher quality representation extracted by the encoder means less content loss at compressing which is more likely to reconstruct a higher quality image when decompression. Thus, SOTA approaches explore introducing more complex modules into the encoder. [37] integrates the transformer into the CNN encoder and uses the transformer-CNN mixture block to extract rich global features. The other approaches aims to reduce the complexity of the decoders that are deployed on edge devices like smartphones. For instance, [54] adopts shallow or even linear decoding transforms to reduce the decoding complexity, compensated by more powerful encoder networks and iterative encoding.
+Generative models for decompression. Although VAE-based methods have achieved good performances, optimizing solely for mean square error (MSE) can lead to excessive image smoothing, resulting in visual artifacts. More recent works [36, 53, 30, 24] have combined VAEs with generative models (e.g. diffusion) to achieve better visual results. [52] uses a conditional diffusion model as the image compression decoder which improves visual results. [30] and [24] decouple the compression task and augmentation task, sending the output of the VAE codec to diffusion to predict the residual.
+Satellite image compression method. There are some compression methods specifically for remote sensing images [57, 23, 50]. [50] uses discrete wavelet transform to divide image features into highfrequency features and low-frequency features, and design a frequency domain encoding-decoding module to preserve high-frequency information, thereby improving the compression performance. [23] explore local and non-local redundancy through a mixed hyperprior network to improve entropy model estimation accuracy. Few of these works focus on onboard deployment. [26] use the CAE model to extract image features and reduce the image dimension to achieve compression, and deploy the model on VPU. However, this method only considers the reduction of image dimension and does not consider the arithmetic coding process in the actual transmission process, resulting in the image compression rate can only be adjusted by changing the model architecture.
+Limitations to use for satellites. Most of the above approaches don’t consider lightweight compression encoders which makes them impractical to deploy on satellite’s embedded GPUs constrained by computing capacity and power supply. The approach used on VPU is impractical as the image compression rate is highly related to model architecture. Besides, none of them pay attention to the multi-modal nature of satellite earth observation images to introduce conditions to further improve decompression quality.
+3 Prelimiaries
+3.1 Problem formulation
+We formulate the basic process of learned image compression. The encoder E uses a non-linearly transformation to convert the input image x into the latent representation y, which is subsequently discretized and entropy-coded by quantization Q under a learned hyper prior ζ. Under the stochastic Gaussian model, each discrete code ⌊y⌉i can be expressed as a Gaussian distribution with mean μi
+and variance σi given a hyper prior ζi: p (⌊y⌉i|ζi) = N μi, σ2
+i
+. The decoder D reconstructs the
+3
+
+
+discrete representation ⌊y⌉ to the image xˆ. The model can be optimized by the loss function (Eq. 1).
+LIC = R + λD = E [− log2 p (⌊y⌉|ζ) − log2 p (ζ)] + λE [d (x, xˆ)] , (1)
+where R is the bit rate of latent discrete coding, D is the distortion between the original and the reconstructed image (measured by MSE), and λ controls the trade-off between rate and distortion.
+3.2 Diffusion model
+Diffusion model is a type of generative model that can generate images from Gaussian noise through multi-step iterative denoising. These models include two Markov processes. First, the diffusion process gradually applies noise to the image until the image is destroyed and becomes complete Gaussian noise. Then, in the reverse stage, it learns the process of restoring the Gaussian noise to the original image. During the inference stage, given a random noise sample xT ∼ N (0, 1), the diffusion model can denoise through T steps and gradually generate a photorealistic image x0. At each step
+t ∈ {0, 1, ..., T}, intermediate variable xt can be expressed as xt = √1 − βtxt−1 + βtεt, where βt ∈ (0, 1) is the variance hyperparameter of Gaussian distribution, and satisfies β1 < β2 < ... < βT; εt ∼ N (0, 1) is the Gaussian noise at step t. In the diffusion model, a noise prediction network (εθ) is used to predict the noise at step t, and xt−1 can be obtained from xt.
+The diffusion model can also understand the content of the given conditions, such as text and images, and generate images consistent with the conditions. In this case, the noise prediction network takes three parameters: intermediate sample xt, timestep t, and given condition ς as input. To guarantee the noise predicted by the noise prediction network at the t-th step of the reverse process has the same distribution as the noise introduced into the image during the diffusion process, diffusion model usually use L2 to optimize the network following ∇θ ∥εt − εθ (xt, t, ς)∥.
+Stable diffusion [42] is proposed to reduce the training cost, which implements the diffusion process in a low-dimensional latent space while retaining the high-dimensional information in the original pixel space for decoding. In this article, we aim to leverage the powerful generation ability of stable diffusion and its ability to maintain consistency with a given condition to provide compensation for the information lost by the image compression encoder.
+4 Method
+4.1 Framework of COSMIC
+As illustrated in Figure 2, COSMIC consists of two components: a compression module and a compensation module. To adapt to the satellite scenarios, the compression module includes a lightweight image compression encoder E and an entropy model deployed on the satellite (Sec. 4.2), as well as an image compression decoder D deployed at the ground station. To fix the content detail loss caused by the lightweight encoder, a compensation module is proposed, which is entirely deployed at the ground station. It has an encoder E ̃, aiming to extract compensation information z0 from original images, which is received by decoder D as compensation for latent representation y′ extracted by E during training (Sec. 4.3). During the inference phase, the noise prediction network generates compensation information z0′ from noise to simulate z0 as a compensation (Sec. 4.4).
+4.2 Lightweight image compression encoder
+To make the image compression encoder E practical on satellites, we first make it lightweight. The main idea is to reduce the amount of calculation required for image compression in terms of FLOPs. We followed the classic architecture of image compression encoder [10], which is structured with downsampling convolutions with a stride of 2 and generalized divisive normalization (GDN) [9] arranged alternately (Figure 2 (a)). Since GDN provides the best performance for image compression when the number of channels is 192 [8], the increase in convolution filters will exponentially increase the calculation amount of convolution. To reduce the amount of computation required for image downsampling, we propose a lightweight convolution block (LCB), as in Figure 2 (d), which uses depthwise convolution to replace the ordinary convolution with a convolution kernel size of 5 × 5. To interact between different channels of the feature map, depthwise convolution is followed by a 1 × 1 convolution with a full number of channels. Inspired by [27], which proves that there is a lot of
+4
+
+
+Q
+enc
+dec
+Hyper-Prior Entropy Model
+LCB ↓2
+LCB ↓2
+CAM
+GDN
+GDN
+LCB ↓2
+CAM
+GDN
+LCB ↓2
+Concat
+GDN
+Image
+Encoder
+Utm Zone Timestamp Gsd Cloud Cover Off-nadir Angle Target Azimuth Sun Azimuth Sun Elevation
+15R 2016-11-19T16:57:25Z 0.5711099 0
+(26.89, 25.58, 28.45, 25.58, 28.45) (296.00, 284.28, 305.57, 284.28, 305.57, ) (158.79, 158.64, 158.93) (37.76, 37.78, 38.18)
+Metadata
+Encoder
+Image
+Decoder
+Ttransconv
+↑2
+Ttransconv
+↑2
+Noise Prediction Network
+Input Image Input Image Output Image
+(a) Compression Model
+VC Block CA Block
+(c) CAM
+(d) LCB
+5x5 conv
+c1oxn1v
+(b) Compensation Model
+Sampling
+Image Compression Encoder
+Only used at training
+Figure 2: COSMIC framework. (a) Compression module for satellite images: a lightweight encoder and a compensation-based decoder (Sec. 4.3). (b) In the noise prediction network, each CrossAttention (CA) block receives embedding of the Metadata Encoder (ME) (Sec. 4.4), and the Vanilla Convolution (VC) blocks use latent image discrete encoding to guide the prediction of noise for each diffusion step. (c) & (d) Convolution attention module and lightweight convolution block (Sec. 4.2).
+redundancy in the features extracted by convolution, in LCB, only half of the output feature maps are obtained through 1 × 1 convolution, and the remaining half of the output feature maps are obtained through linear transformations with cheap cost using redundant features.
+Transformer-based methods [58, 37] can outperform CNN-based methods as the attention can capture non-local information of the images. However, the computational complexity of self-attention has a quadratic relationship with the size of the input feature map, which is not computationally friendly. Inspired by [44], we use two one-dimensional convolutions in series. The first convolution is used to extract horizontal information. On this basis, the second convolution is used to vertically synthesize the previously extracted horizontal information to obtain the global attention map. Meanwhile, the other branch uses LCB with one stride to capture local information, as shown in Figure 2 (c).
+4.3 Compensation-guided image compression
+After giving a lightweight design of the image compression encoder E, we note that the representation ability of this encoder is inevitably degraded. Specifically, the features contained in the latent representation ⌊y⌉ received by the ground station are not enough to let the decoder reconstruct a high-quality image. Thus, we explore compensation for the degradation in encoding.
+It is well-known that stable diffusion has powerful generation capabilities for specified content from noise under the guidance of text information [42]. The ground station can obtain not only the latent representation compressed by the encoder but also rich sensor data like the geographical location, time, camera parameters, etc. along with each image. We use these sensor data as conditions to guide diffusion generation to fix the missing image details. The training is divided into two stages. In the first stage, we train the compression model. As shown in (Figure 2 (b)), since the Image decoder D needs two parts of information (i.e. y′ and z0 in Figure 2) for decoding, we introduce another image encoder E ̃ to extract compensation information z0 from the original image. In the first stage, E, E ̃ and D are trained together. The reconstructed image xˆ can be expressed as in Eq. 2.
+xˆ = D
+
+concat
+
+transconv (⌊y⌉) , E ̃ (x0)
+
+(2)
+In the second stage of training, we freeze the parameters of E, E ̃ and D, and train the noise prediction network, with the goal of making the information generated by the diffusion model as close to z0 as possible, denoted as z0′, so as to generate the compensation information required by the decoder.
+5
+
+
+During the inference phase, the trained diffusion model can generate compensation information z0′. Therefore, we no longer need E ̃. The z0′ generated by the diffusion model replaces the z0 extracted by E ̃ to help the image decoder decompress the image.
+4.4 Conditional diffusion model for loss compensation
+As pointed out in Sec. 1, earth observation images collected by satellites are indeed multi-modal data. Here we consider that a satellite image x0, when transmitted to the ground station, contains a discrete image coding ⌊y⌉ paired with its sensor information denoted as numerical metadata m. For m ∈ RM, just like diffusion handles timestep t, we use sinusoidal embedding (Esin) to encode them
+to cj ∈ R1×d (j = 1, 2, ...M), where d is the dimension of the clip embedding, as we concatenate the metadata embedding together as a description of an image. This process is expressed as in Eq. 3.
+cfinal = MLP (concat ([Esin (m1) , ..., Esin (mM )])) (3)
+This final metadata condition will be incorporated into the latent representation using CrossAttention (CA) blocks to guide the generation process.
+Stable diffusion was originally used for generative tasks, which have randomness. Here, we expect that stable diffusion generates image details that are not extracted by the satellite image encoder E, and still retain the overall structure of the image. To address this problem, we inject the discrete image coding ⌊y⌉ into the Vanilla Convolution (VC) blocks of the noise prediction network to provide the structure information and improve content consistency, which can be described in Eq. 4.
+fi′ = fi + projectioni (⌊y⌉) , (4)
+where fi is the i-th feature map of the U-Net backbone, and projectioni is the upsampling convolution used to align the dimensions between ⌊y⌉ and fi. Guided by image coding and the metadata as a description, we use MSE loss to minimize the distance between target distribution and learned distribution in latent space as in Eq. 5.
+Lldm = Et,z0,ε∼N (0,1)
+h
+εt − εθ zt, t, ⌊y⌉, cfinal 2i
+(5)
+5 Experiments
+5.1 Setup
+Dataset. We use the function Map of the World (fMoW) [13], which has 62 categories, and in which each image is paired with different types of metadata features, as our training data and test data. For training data, we randomly crop the image to a resolution of 256 × 256 pixels. For information collected by satellite sensors as metadata, we choose UTM zone, Timestamp, GSD, Cloud cover, Off-nadir Angle, Target Azimuth, Sun Azimuth, and Sun Elevation provided by fMoW.
+For testing data, we constructed two test sets with different resolutions. One is from the fMoW test set, where to ensure a comprehensive representation of categories, we randomly selected one image from each category, cropped it to a resolution of 256 × 256, and used it as a standard test set. For another test set, we considered the actual scenario of the satellite to construct a tile test set. Since the image captured by the satellite is a large geographic region, the computing resources on the satellite are limited, and large-size images cannot be processed directly, so images should first be cut into smaller sub-images, this process is known as tiling [31, 51, 17, 11]. In this paper, for images of size 2306 × 2306, we first divide each image into 81 smaller patches of size 256 × 256 each, and then compress and decompress each patch individually, as illustrated in Figure 5 (a). After obtaining all the decompressed patches, we reassemble them as one image for further evaluation.
+Metrics. We use 4 metrics for quantitative measures following previous works [39, 36, 53]. For distortion comparison, we use the Peak Signal-to-Noise Ratio (PSNR) and Multi-Scale Structural Similarity Index Measure (MS-SSIM) to validate the pixel fidelity and measure brightness, contrast, and structural information at different scales. For perceptual comparison, we choose Learned Perceptual Image Patch Similarity (LPIPS) and Fréchet Inception Distance (FID).
+Model training details. The training has two stages. First, we train the image compression encoder E, image encoder E ̃ and image decoder D together using LIC for 100 epochs with a batchsize of 32.
+6
+
+
+Second, we freeze the parameters of the model trained in the first stage, use the pretrained stable diffusion model for the noise prediction network, and finetune it using Lldm for 10 epochs with a batchsize of 4. All the training experiments are performed on 10× NVIDIA GeForce RTX 3090 using Adam optimizer with lr = 1 × 10−4 and λ ∈ {0.00067, 0.0013, 0.0026, 0.005}. During inference, we utilize the DDIM sampling [43] with 25 steps.
+Baselines. We consider 6 baselines including traditional methods, VAE-based methods, and generative model based methods. Elic [28] proposes a multi-dimension entropy estimation model, which can effectively reduce the bit rate and improve the coding performance. Hific [39] pays more attention to the perception of the model reconstruction effect, obtaining visually pleasing reconstructed images. Based on Hific, COLIC [36] considers the semantic information of the image when designing the loss function, and treats structure and texture respectively. CDC [53] is the first work to use the diffusion model as an image compression decoder, performing the reverse process of diffusion in pixel space to reconstruct the image. HL_RS [50] is an image compression method, especially for remote sensing images, which processes the high-frequency part and the low-frequency part of the images separately to better preserve the important high-frequency features of remote sensing images. For these 5 baselines, we retrain their models with the fMoW dataset for a fair comparison. Besides, we choose JPEG2000, the industrial solution for satellite image compression [55], for comparison.
+5.2 Comparison with baselines
+RD performance. Figure 3 shows the comparison results with baselines on two test sets. The dotted line in the figure represents the baselines, and the solid line represents COSMIC. We demonstrate results from two perspectives, i.e., distortion and perception. Across all transmission rates, COSMIC surpasses the baselines in terms of LPIPS, and FID. At low bpp, the MS-SSIM of COSMIC is lower compared to the baseline. This is mainly because as the bpp decreases, the encoder extracts less information, and during the decompression process, there is a greater reliance on diffusion-based generation (more details in Sec. 5.4). Additionally, due to the degraded feature extraction of the lightweight encoder, the feature obtained at low bpp is insufficient to guide the diffusion process in generating high-fidelity images. As the bpp increases, the latent coding contains more features, resulting in a significant improvement in the MS-SSIM of COSMIC, demonstrating SOTA performance. Note that the sensor data is transmitted to the ground by default in earth observation missions. Besides, the volume of these sensor data is negligible compared with images so we do not consider them when counting bpp. We show more results of more metrics and baselines including VAE-based methods in Appendix B which COSMIC achieves the SOTA performance on all 6 perceptual metrics.
+0.4 0.6 0.8
+24.0
+25.0
+26.0
+27.0
+28.0
+29.0
+fMoW testset
+PSNR
+JPEG2000 ELIC CDC Hific COLIC HL_RS COSMIC
+0.4 0.6 0.8
+0.94
+0.95
+0.96
+0.97
+0.98
+0.99
+MS-SSIM
+0.4 0.6 0.8
+0.05
+0.10
+0.15
+0.20
+LPIPS
+0.4 0.6 0.8
+20
+40
+60
+80
+100
+FID
+0.2 0.4 0.6 bpp
+25.0
+26.5
+28.0
+29.5
+31.0
+32.5
+tile testset
+JPEG2000 ELIC CDC Hific COLIC HL_RS COSMIC
+0.2 0.4 0.6 bpp
+0.90
+0.92
+0.94
+0.96
+0.98
+0.2 0.4 0.6 bpp
+0.05
+0.10
+0.15
+0.20
+0.25
+0.2 0.4 0.6 bpp
+20
+40
+60
+80
+100
+120
+Figure 3: Trade-off between bitrates and different metrics on COSMIC and baselines. The ↑ (↓) means higher (lower) is better. The first row is for the fMoW test set (image size 256 × 256). The second is for the tile test set by comparing between the stitched images and their original ones.
+Visual results. Figure 4 shows the example of reconstructed images at low bitrates and high bitrates. For fair comparison, we only show the results of optimizing for image perception. Figure 5 (b) shows an example of high-resolution image reconstruction by COSMIC and baselines. Due to the tiling and
+7
+
+
+stitching process in image compression, we pay particular attention to the seams where different small patches form a larger image. JPEG2000 exhibits noticeable misalignment at the image seams. Hific and COLIC can not accurately restore the details of the seam. For example, in the picture outlined in orange, the car headlight at the seam has been reconstructed into a red dot. The diffusion-based CDC reconstruction also exhibits some color differences between different sub-images and shows noticeable misalignment, such as the eaves at the seam in the picture outlined in red. Compared to baselines, COSMIC maintains a higher similarity in structure and color between different sub-images, resulting in significant visual improvements.
+Original JPEG2000
+[0.29bpp/PSNR:27.86]
+CDC
+[0.28bpp/PSNR:28.54]
+COLIC
+[0.20bpp/PSNR:27.28]
+HIFIC
+[0.19bpp/PSNR:27.62]
+COSMIC
+[0.21bpp/PSNR:28.70]
+Original JPEG2000
+[0.79bpp/PSNR:29.14]
+CDC
+[0.82bpp/PSNR:30.23]
+COLIC
+[0.74bpp/PSNR:29.06]
+HIFIC
+[0.68bpp/PSNR:29.36]
+COSMIC
+[0.75bpp/PSNR:30.85]
+Figure 4: Decompressed fMoW images (full images in supplementary material). 1st row: comparison under low bitrates, COSMIC shows better visual effects. Compared with CDC, COSMIC still gets slightly better visual reconstruction with less bitrates. 2nd row: comparison under high bitrates.
+5.3 Encoder efficiency analysis
+Table 1: Comparison of the on-satellite FLOPs with baselines on the tile test set. Best performances are highlighted in bold.
+Method FLOPs (G) PSNR↑ MS-SSIM↑ LPIPS↓ FID↓ bpp↓ CDC [53] 13.1 31.98 0.982 0.0462 45.49 0.66 COLIC [36] 26.4 29.04 0.975 0.0530 32.56 0.64 Hific [39] 26.4 29.11 0.977 0.0384 27.01 0.60 Elic [28] 21.78 33.31 0.983 0.0683 60.80 0.54 HL_RS [50] 11.87 31.30 0.979 0.0782 27.38 0.56 COSMIC 4.9 32.11 0.980 0.0359 13.50 0.59
+We evaluate the lightweight encoder of COSMIC in terms of FLOPs in Table 1. Compared with baselines, the on-satellite FLOPs (including the encoder and entropy model) of COSMIC has been significantly reduced by roughly 2.6 ∼ 5× while the overall performance of COSMIC can still outperform baselines under a similar bitrate.
+5.4 Ablation study
+w/o DC. To demonstrate the compensatory role of diffusion in the image reconstruction process, we remove the diffusion compensation module, and the results are shown in Figure 6. We remove the compensation module and retrain the model to show the quantitative metrics. The result shows that the diffusion model plays an important role in decompressing images to get better perceptual metrics. To show the compensatory role of the diffusion model more clearly, we directly remove the diffusion model and only use the output information of the lightweight encoder E to reconstruct the image. We find that at low bitrate, diffusion compensation is more important. Due to the insufficient feature extraction capability of the lightweight encoder, many image content details are lost to save the transmission rate, and diffusion needs to reconstruct much of the image content guided by the limited output of the encoder, along with the metadata. As the bitrate increases, more features extracted by the encoder can be retained, and at this point, diffusion only needs to compensate for some image details that the encoder failed to capture. The visual results are shown in Figure 7. The results indicate that using the diffusion model as compensation is very useful, especially with a small bitrate.
+8
+
+
+COSMIC
+[0.30bpp/PSNR:24.75]
+Original JPEG2000
+[0.38bpp/PSNR:24.41]
+CDC
+[0.41bpp/PSNR:24.82]
+COLIC
+[0.24bpp/PSNR:23.77]
+HIFIC
+[0.24bpp/PSNR:24.04]
+(a) Illustration for tile testset Original
+(b) Visual result
+Figure 5: (a) Illustration of the tile test set. A high-resolution image is divided into many small subimages (or patches), each of which is compressed individually. The reconstructed sub-images are then placed back in their original positions and stitched together to form a high-resolution reconstructed image. (b) On the tile test set, we provide two detailed views of a stitching area (outlined in orange and red). The visual comparison between COSMIC and the baseline shows that COSMIC achieves the best visual effects in terms of texture alignment and consistency in color brightness.
+Table 2: Effect on image classification model. Classes Original JPEG2K [46] Elic [28] COLIC [36] HIFIC [39] CDC [53] HL_RS [50] COSMIC 10 98.95% -4.21% -5.27% -1.06% -1.06% -2.11% -2.11% -1.06% 15 97.92% -4.17% -3.84% -0.70% -0.70% -1.40% -1.39% -0.70% 20 98.42% -3.16% -3.68% -0.53% -0.53% -1.06% -2.1% -1.06%
+w/o CAM. To show the CAM module can capture non-local information, which can help the encoder E to get higher quality representation. We remove the CAM module and show the results in Figure 6. The result shows that CAM module is effective and can achieve better RD performance.
+w/o ME. To show that sensor data can guide the generation of diffusion, we remove the metadata encoder and only use image encoding for diffusion generation. Please note that there are mainly two kinds of sensor data here including the camera parameters such as the off-nadir angle and target azimuth used during image capture and the data on cloud cover, illumination, and ground sample distance, etc. Figure 6 indicates that sensor data helps guide the diffusion in reconstructing the image.
+Influence of decoding steps. We further investigate the impact of different denoising step counts in the reverse diffusion process on the reconstructed image quality, as shown in Figure 8. We find that as the number of denoising steps increases, the perceptual metrics of the generated images gradually improve, which is consistent with the exploration of the relationship between denoising steps and FID scores in DDIM [43]. While the perceptual results improve, distortion metrics such as PSNR experience a slight decline, showcasing the trade-off between perceptual quality and distortion. In practical deployment and downstream tasks, the number of denoising steps can be selected based on different emphases on distortion and perceptual performance to suit actual applications.
+5.5 Compression influence on downstream tasks
+To confirm that COSMIC will not affect the downstream remote sensing tasks, such as image classification, we choose the image classification task in [7] to show the effect caused by compression, as shown in Table 2. The same test images are compressed at a low bitrate level and decompressed, then processed through the classification model to obtain the accuracy changes on different numbers of
+9
+
+
+0.3 0.4 0.5 0.6 0.7 0.8 bpp
+24
+25
+26
+27
+28
+29
+PSNR
+w/o CAM w/o ME w/o DC COSMIC
+0.3 0.4 0.5 0.6 0.7 0.8 bpp
+0.94
+0.95
+0.96
+0.97
+0.98
+MS-SSIM
+0.3 0.4 0.5 0.6 0.7 0.8 bpp
+0.050
+0.075
+0.100
+0.125
+0.150
+0.175
+0.200
+0.225
+LPIPS
+0.3 0.4 0.5 0.6 0.7 0.8 bpp
+20
+30
+40
+50
+60
+70 FID
+Figure 6: Ablation study with different variants of COSMIC. “w/o DC” indicates that diffusion compensation was not used during decoding. “w/o ME” denotes that we remove the metadata encoder. To show the effect of the metadata encoder, we mark the finer differences with red boxes in the figure.
+classes. The result shows that JPEG2000 and Elic reduce the accuracy by the most and COSMIC is outstanding in learning methods.
+Original w/o DC
+[0.48bpp/PSNR:17.91]
+w/ DC
+[0.48bpp/PSNR:26.59] Original w/o DC
+[0.69bpp/PSNR:25.53]
+w/ DC
+[0.69bpp/PSNR:29.77]
+Figure 7: Contrast visual results. “w/ DC” means using of diffusion for compensation during decoding, while “w/o DC” indicates that diffusion compensation was not used during decoding.
+Figure 8: Compression performance with different numbers of decoding step.
+6 Conclusion
+We present COSMIC, a novel approach to compress images for satellite earth observation missions. We first design a lightweight encoder to adapt to the limited resources on satellites. Then, we introduce a conditional latent diffusion model by using the sensor data of satellite as instructions to compensate the missing details due to the lightweight encoder’s degradation of feature extraction. Extensive results indicate that COSMIC can not only achieve SOTA compression performance for 2 typical satellite tasks but also guarantee the accuracy of satellite images’ downstream tasks.
+Limitations & Future work. Even though COSMIC compensates for encoder limitations using diffusion, at extremely low bpp (e.g., less than 0.1bpp), the information provided by latent image coding may not be enough to support diffusion in generating high-fidelity images. We think the main reason is that we only finetune the pretrained Stable Diffusion model, which lacks sufficient prior knowledge of satellite images. As a prospective solution, we will train a diffusion model specifically for satellite images or use historical satellite images as a reference for further improvements.
+Acknowledgement. This work was supported by the National Key R&D Program of China (2022YFB3105202), National Natural Science Foundation of China (62106127, 62301189, 62132009), and key fund of National Natural Science Foundation of China (62272266).
+10
+
+
+References
+[1] 1. https://www.nvidia.cn/autonomous-machines/embedded-systems/ jetson-xavier-nx/.
+[2] 2. https://blogs.nvidia.com/blog/orbital-sidekick/.
+[3] 3. http://www.stardetect.cn/h-col-127.html.
+[4] 4. Shoot from the stars: Startup provides early detection of wildfires from space. https: //blogs.nvidia.com/blog/ororatech-wildfires-from-space/.
+[5] Frédéric Achard, Hans-Jürgen Stibig, Hugh D Eva, Erik J Lindquist, Alexandre Bouvet, Olivier Arino, and Philippe Mayaux. Estimating tropical deforestation from earth observation data. Carbon Management, 1(2):271–287, 2010.
+[6] Caleb Adams, Allen Spain, Jackson Parker, Matthew Hevert, James Roach, and David Cotten. Towards an integrated gpu accelerated soc as a flight computer for small satellites. In 2019 IEEE aerospace conference, pages 1–7. IEEE, 2019.
+[7] Ali Bahri, Sina Ghofrani Majelan, Sina Mohammadi, Mehrdad Noori, and Karim Mohammadi. Remote sensing image classification via improved cross-entropy loss and transfer learning strategy based on deep convolutional neural networks. IEEE Geoscience and Remote Sensing Letters, 17(6):1087–1091, 2020.
+[8] Johannes Ballé. Efficient nonlinear transforms for lossy image compression. In 2018 Picture Coding Symposium (PCS), pages 248–252. IEEE, 2018.
+[9] Johannes Ballé, Valero Laparra, and Eero P Simoncelli. Density modeling of images using a generalized normalization transformation. arXiv preprint arXiv:1511.06281, 2015.
+[10] Johannes Ballé, David Minnen, Saurabh Singh, Sung Jin Hwang, and Nick Johnston. Variational image compression with a scale hyperprior. arXiv preprint arXiv:1802.01436, 2018.
+[11] Marc Bosch, Kevin Foster, Gordon Christie, Sean Wang, Gregory D Hager, and Myron Brown. Semantic stereo for incidental satellite images. In 2019 IEEE Winter Conference on Applications of Computer Vision (WACV), pages 1524–1532. IEEE, 2019.
+[12] Zhengxue Cheng, Heming Sun, Masaru Takeuchi, and Jiro Katto. Learned image compression with discretized gaussian mixture likelihoods and attention modules. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition, pages 7939–7948, 2020.
+[13] Gordon Christie, Neil Fendley, James Wilson, and Ryan Mukherjee. Functional map of the world. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition, pages 6172–6180, 2018.
+[14] Laura Crocetti, Matthias Forkel, Milan Fischer, František Jurecˇka, Aleš Grlj, Andreas Salentinig, Miroslav Trnka, Martha Anderson, Wai-Tim Ng, Žiga Kokalj, et al. Earth observation for agricultural drought monitoring in the pannonian basin (southeastern europe): current state and future directions. Regional Environmental Change, 20:1–17, 2020.
+[15] Rogier de Jong, Sytze de Bruin, Michael Schaepman, and David Dent. Quantitative mapping of global land degradation using earth observations. International Journal of Remote Sensing, 32 (21):6823–6853, 2011.
+[16] Bradley Denby and Brandon Lucia. Orbital edge computing: Nanosatellite constellations as a new class of computer system. In Proceedings of the Twenty-Fifth International Conference on Architectural Support for Programming Languages and Operating Systems, pages 939–954, 2020.
+[17] Bradley Denby, Krishna Chintalapudi, Ranveer Chandra, Brandon Lucia, and Shadi Noghabi. Kodan: Addressing the computational bottleneck in space. In Proceedings of the 28th ACM International Conference on Architectural Support for Programming Languages and Operating Systems, Volume 3, pages 392–403, 2023.
+11
+
+
+[18] Kiruthika Devaraj, Ryan Kingsbury, Matt Ligon, Joseph Breu, Vivek Vittaldev, Bryan Klofas, Patrick Yeon, and Kyle Colton. Dove high speed downlink system. 2017.
+[19] Lauren Dreyer. Latest developments on spacex’s falcon 1 and falcon 9 launch vehicles and dragon spacecraft. In 2009 IEEE Aerospace conference, pages 1–15. IEEE, 2009.
+[20] Thomas Esch, Soner Üreyen, Julian Zeidler, Annekatrin Metz-Marconcini, Andreas Hirner, Hubert Asamer, Markus Tum, Martin Böttcher, S Kuchar, Vaclav Svaton, et al. Exploiting big earth data from space–first experiences with the timescan processing chain. Big Earth Data, 2 (1):36–55, 2018.
+[21] M Esposito, BC Dominguez, M Pastena, N Vercruyssen, SS Conticello, C van Dijk, PF Manzillo, and R Koeleman. Highly integration of hyperspectral, thermal and artificial intelligence for the esa phisat-1 mission. In Proceedings of the International Astronautical Congress IAC, Washington, DC, USA, pages 21–25, 2019.
+[22] Warren Frick and Carlos Niederstrasser. Small launch vehicles-a 2018 state of the industry survey. 2018.
+[23] Chuan Fu and Bo Du. Remote sensing image compression based on the multiple prior information. Remote Sensing, 15(8):2211, 2023.
+[24] Noor Fathima Khanum Mohamed Ghouse, Jens Petersen, Auke J Wiggers, Tianlin Xu, and Guillaume Sautiere. Neural image compression with a diffusion-based decoder. 2022.
+[25] Gianluca Giuffrida, Luca Fanucci, Gabriele Meoni, Matej Batiˇc, Léonie Buckley, Aubrey Dunne, Chris Van Dijk, Marco Esposito, John Hefele, Nathan Vercruyssen, et al. The φ-sat-1 mission: The first on-board deep neural network demonstrator for satellite earth observation. IEEE Transactions on Geoscience and Remote Sensing, 60:1–14, 2021.
+[26] Giorgia Guerrisi, Fabio Del Frate, and Giovanni Schiavon. Artificial intelligence based on-board image compression for the φ-sat-2 mission. IEEE Journal of Selected Topics in Applied Earth Observations and Remote Sensing, 2023.
+[27] Kai Han, Yunhe Wang, Qi Tian, Jianyuan Guo, Chunjing Xu, and Chang Xu. Ghostnet: More features from cheap operations. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition, pages 1580–1589, 2020.
+[28] Dailan He, Ziming Yang, Weikun Peng, Rui Ma, Hongwei Qin, and Yan Wang. Elic: Efficient learned image compression with unevenly grouped space-channel contextual adaptive coding. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, pages 5718–5727, 2022.
+[29] Miguel Hernández-Cabronero, Aaron B Kiely, Matthew Klimesh, Ian Blanes, Jonathan Ligo, Enrico Magli, and Joan Serra-Sagrista. The ccsds 123.0-b-2 “low-complexity lossless and near-lossless multispectral and hyperspectral image compression” standard: A comprehensive review. IEEE Geoscience and Remote Sensing Magazine, 9(4):102–119, 2021.
+[30] Emiel Hoogeboom, Eirikur Agustsson, Fabian Mentzer, Luca Versari, George Toderici, and Lucas Theis. High-fidelity image compression with score-based generative models. arXiv preprint arXiv:2305.18231, 2023.
+[31] Bohao Huang, Daniel Reichman, Leslie M Collins, Kyle Bradbury, and Jordan M Malof. Tiling and stitching segmentation output for remote sensing: Basic challenges and recommendations. arXiv preprint arXiv:1805.12219, 2018.
+[32] Nick Johnston, Elad Eban, Ariel Gordon, and Johannes Ballé. Computationally efficient neural image compression. arXiv preprint arXiv:1912.08771, 2019.
+[33] Bahjat Kawar, Michael Elad, Stefano Ermon, and Jiaming Song. Denoising diffusion restoration models. Advances in Neural Information Processing Systems, 35:23593–23606, 2022.
+12
+
+
+[34] Claudia Kuenzer, Marco Ottinger, Martin Wegmann, Huadong Guo, Changlin Wang, Jianzhong Zhang, Stefan Dech, and Martin Wikelski. Earth observation satellite sensors for biodiversity monitoring: potentials and bottlenecks. International Journal of Remote Sensing, 35(18): 6599–6647, 2014.
+[35] Richard Lawford, Adrian Strauch, David Toll, Balazs Fekete, and Douglas Cripe. Earth observations for global water security. Current Opinion in Environmental Sustainability, 5(6): 633–643, 2013.
+[36] Meng Li, Shangyin Gao, Yihui Feng, Yibo Shi, and Jing Wang. Content-oriented learned image compression. In European Conference on Computer Vision, pages 632–647. Springer, 2022.
+[37] Jinming Liu, Heming Sun, and Jiro Katto. Learned image compression with mixed transformercnn architectures. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, pages 14388–14397, 2023.
+[38] Henry Martin, Conor Brown, Tristan Prejean, and Nathan Daniels. Bolstering mission success: Lessons learned for small satellite developers adhering to manned spaceflight requirements. 2018.
+[39] Fabian Mentzer, George D Toderici, Michael Tschannen, and Eirikur Agustsson. High-fidelity generative image compression. Advances in Neural Information Processing Systems, 33:1191311924, 2020.
+[40] Prem Chandra Pandey, Nikos Koutsias, George P Petropoulos, Prashant K Srivastava, and Eyal Ben Dor. Land use/land cover in view of earth observation: Data sources, input dimensions, and classifiers—a review of the state of the art. Geocarto International, 36(9):957–988, 2021.
+[41] George P Petropoulos, Prashant K Srivastava, Maria Piles, and Simon Pearson. Earth observation-based operational estimation of soil moisture and evapotranspiration for agricultural crops in support of sustainable water management. Sustainability, 10(1):181, 2018.
+[42] Robin Rombach, Andreas Blattmann, Dominik Lorenz, Patrick Esser, and Björn Ommer. Highresolution image synthesis with latent diffusion models. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition, pages 10684–10695, 2022.
+[43] Jiaming Song, Chenlin Meng, and Stefano Ermon. Denoising diffusion implicit models. arXiv preprint arXiv:2010.02502, 2020.
+[44] Yehui Tang, Kai Han, Jianyuan Guo, Chang Xu, Chao Xu, and Yunhe Wang. Ghostnetv2: enhance cheap operation with long-range attention. Advances in Neural Information Processing Systems, 35:9969–9982, 2022.
+[45] Bill Tao, Om Chabra, Ishani Janveja, Indranil Gupta, and Deepak Vasisht. Known knowns and unknowns: Near-realtime earth observation via query bifurcation in serval. In 21st USENIX Symposium on Networked Systems Design and Implementation (NSDI 24), pages 809–824, 2024.
+[46] David S Taubman, Michael W Marcellin, and Majid Rabbani. Jpeg2000: Image compression fundamentals, standards and practice. Journal of Electronic Imaging, 11(2):286–287, 2002.
+[47] Soner Uereyen and Claudia Kuenzer. A review of earth observation-based analyses for major river basins. Remote Sensing, 11(24):2951, 2019.
+[48] Gregory K Wallace. The jpeg still picture compression standard. Communications of the ACM, 34(4):30–44, 1991.
+[49] Michael A Wulder, David P Roy, Volker C Radeloff, Thomas R Loveland, Martha C Anderson, David M Johnson, Sean Healey, Zhe Zhu, Theodore A Scambos, Nima Pahlevan, et al. Fifty years of landsat science and impacts. Remote Sensing of Environment, 280:113195, 2022.
+[50] Shao Xiang and Qiaokang Liang. Remote sensing image compression based on high-frequency and low-frequency components. IEEE Transactions on Geoscience and Remote Sensing, 2024.
+13
+
+
+[51] Chen Xu, Xiaoping Du, Zhenzhen Yan, and Xiangtao Fan. Cloud-based parallel tiling algorithm for large scale remote sensing datasets. In IGARSS 2022-2022 IEEE International Geoscience and Remote Sensing Symposium, pages 4030–4033. IEEE, 2022.
+[52] Ruihan Yang and Stephan Mandt. Lossy image compression with conditional diffusion models. arXiv preprint arXiv:2209.06950, 2022.
+[53] Ruihan Yang and Stephan Mandt. Lossy image compression with conditional diffusion models. Advances in Neural Information Processing Systems, 36, 2024.
+[54] Yibo Yang and Stephan Mandt. Computationally-efficient neural image compression with shallow decoders. In Proceedings of the IEEE/CVF International Conference on Computer Vision, pages 530–540, 2023.
+[55] Xiaqiong Yu, Jinxian Zhao, Tao Zhu, Qiang Lan, Lin Gao, and Lingzhi Fan. Analysis of JPEG2000 compression quality of optical satellite images. In 2022 2nd Asia-Pacific Conference on Communications Technology and Computer Science (ACCTCS), pages 500–503. IEEE, 2022.
+[56] Gokhan Yuksel, Onder Belce, and Hakan Urhan. Bilsat-1: First earth observation satellite of turkey-operations and lessons learned. In Proceedings of 2nd International Conference on Recent Advances in Space Technologies, 2005. RAST 2005., pages 846–851. IEEE, 2005.
+[57] Lei Zhang, Xugang Hu, Tianpeng Pan, and Lili Zhang. Global priors with anchored-stripe attention and multiscale convolution for remote sensing images compression. IEEE Journal of Selected Topics in Applied Earth Observations and Remote Sensing, 2023.
+[58] Renjie Zou, Chunfeng Song, and Zhaoxiang Zhang. The devil is in the details: Window-based attention for image compression. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition, pages 17492–17501, 2022.
+14
+
+
+A Details about COSMIC
+A.1 Details of train and inference
+We present a more detailed explanation of our two-stage training and inference pipeline in algorithm 1 and algorithm 2.
+Algorithm 1: Two-stage training of COSMIC.
+input :A satellite image x, referenced image x(the same as satellite image, used only for training), metadata mi ∈ RM output :Reconstructed image xˆ Parameters: Image encoder on satellite E, image encoder of diffusion E ̃, image decoder D, noise prediction network εθ
+/* Training stage 1 : Train E, E ̃, and D together. */ 1 y = E (x); 2 ζ = entropy_model(y);
+3 μz, σz = E ̃ (x0); 4 εz ∼ N (0, I);
+5 z0 = μz + σz ∗ εz;
+6 xˆ = D (concat (z0, deconv (⌊y⌉)));
+7 optimize the parameters of E, E ̃, and D following:
+LIC = R + λD = E [− log2 p (⌊y⌉|ζ) − log2 p (ζ)] + λE [d (x, xˆ)]
+/* Training stage 2 :Freeze the parameters of E, E ̃, and D, and only update the parameters of εθ. */ 8 repeat
+9 sample x, m ∼ dataset; 10 t ∼ U (1, 2, ..., T); 11 εt ∼ N (0, I); 12 cfinal = metadata_encoder(m);
+13 optimize the parameters of εθ following:
+Lldm = Et,z0,ε∼N (0,1)
+h
+εt − εθ zt, t, ⌊y⌉, cfinal 2i
+14 until converge;
+Algorithm 2: Compress and decompress pipeline of COSMIC.
+input :A satellite image x, metadata mi ∈ RM output :Reconstructed image xˆ Parameters: Image encoder on satellite E, image decoder D, noise prediction network εθ
+/* Compress */ 1 y = E (x); 2 ζ = entropy_model(y); 3 ⌊y⌉ = Quantization (y, ζ);
+/* Decompress */ 4 sample zT ∼ N (0, I); 5 for t = T, ..., 1 do
+6 εt ← εθ zt, t, ⌊y⌉, cfinal; 7 zt−1 ← DDIM (zt, t, εt); 8 end
+9 return z0′;
+10 xˆ = D (concat (z0′, deconv (⌊y⌉)));
+15
+
+
+Table 3: Detailed network structure of E ̃ and D. Architecture of image encoder E ̃ input referenced image layer1 Conv(3 × 192 × 5 × 5,s=2), GND(192) layer2 Conv(192 × 192 × 5 × 5,s=2), GND(192) layer3 Conv(192 × 192 × 5 × 5,s=1), GND(192) layer4 Conv(192 × 8 × 5 × 5,s=1) output z0
+Architecture of image decoder D input ⌊y⌉, z0′ layer1 Conv(196 × 192 × 5 × 5,s=1), IGND(192) layer2 Conv(192 × 192 × 5 × 5,s=1), IGND(192) layer3 Conv(192 × 192 × 5 × 5,s=2), IGND(192) layer4 Conv(192 × 3 × 5 × 5,s=2) output reconstructed image
+A.2 Detailed architecture of COSMIC
+The overall framework of COSMIC has been illustrated in the main paper. Here, we provide the detailed architecture of image encoder E ̃ and image decoder D respectively in Table 3.
+B Additional Rate-Distortion(Perception) Results
+0.3 0.4 0.5 0.6 0.7 0.8 0.9 bpp
+20
+40
+60
+80
+100
+FID
+JPEG2000 Cheng_2020 Minnen_2018 CDC Hific COLIC ELIC HL_RS COSMIC
+0.3 0.4 0.5 0.6 0.7 0.8 0.9 bpp
+0.05
+0.10
+0.15
+0.20
+0.25
+LPIPS
+0.3 0.4 0.5 0.6 0.7 0.8 0.9 bpp
+0.4
+0.6
+0.8
+1.0
+1.2
+1.4
+1.6
+PIEAPP
+0.3 0.4 0.5 0.6 0.7 0.8 0.9 bpp
+0.02
+0.04
+0.06
+0.08
+0.10
+KID
+0.3 0.4 0.5 0.6 0.7 0.8 0.9 bpp
+0.06
+0.08
+0.10
+0.12
+0.14
+0.16
+0.18
+0.20
+0.22
+DISTS
+0.3 0.4 0.5 0.6 0.7 0.8 0.9 bpp
+0.60
+0.65
+0.70
+0.75
+0.80
+0.85
+0.90
+TOPIQ_FR
+0.3 0.4 0.5 0.6 0.7 0.8 0.9 bpp
+0.02
+0.03
+0.04
+0.05
+0.06
+0.07
+0.08
+0.09
+GMSD
+0.3 0.4 0.5 0.6 0.7 0.8 0.9 bpp
+40
+50
+60
+70
+80
+90
+100
+110
+MAD
+0.3 0.4 0.5 0.6 0.7 0.8 0.9 bpp
+0.950
+0.955
+0.960
+0.965
+0.970
+0.975
+0.980
+0.985
+VSI
+0.3 0.4 0.5 0.6 0.7 0.8 0.9 bpp
+24
+25
+26
+27
+28
+29
+30
+31
+32
+PSNR
+0.3 0.4 0.5 0.6 0.7 0.8 0.9 bpp
+0.94
+0.95
+0.96
+0.97
+0.98
+0.99
+MS-SSIM
+0.3 0.4 0.5 0.6 0.7 0.8 0.9 bpp
+0.984
+0.986
+0.988
+0.990
+0.992
+0.994
+0.996
+0.998
+CW-SSIM
+Figure 9: Rate-Distortion(Perception) for fMoW dataset.
+16
+
+
+C Failure cases analysis
+Stable diffusion was originally used for generative tasks, which can produce textures and content that do not exist in reality. In COSMIC, we ensure the consistency of content and texture by injecting discrete latent coding ⌊y⌉ into the Vanilla Convolution (VC) blocks of the noise prediction network to provide structural information. However, in some cases, especially at extremely low bitrates, the latent discrete coding may lack structural information, leading to the diffusion generating nonexistent textures. As illustrated in Figure 10 (a), when a satellite image captures an ocean scene, the insufficient information in the latent coding at low bitrates requires heavy reliance on diffusion for generation, resulting in textures that do not exist in the reconstructed image. In the case of high bitrates, as described in the main paper, the reliance on diffusion reduces, and in the same scenario, the appearance of non-existent textures can be controlled. However, in practice, remote sensing downstream tasks are more concerned with regions of interest (ROIs). For example, in remote sensing tasks for oceans, such as ship detection , only the parts where ships are present are of interest. As shown in Figure 10 (b), even at low bitrates, while the reconstruction of the sea surface may introduce non-existent textures, the reconstruction of the ship parts remains intact. Therefore, although COSMIC may have minor visual flaws, it does not affect downstream detection tasks.
+Original BPP:0.024 PSNR: 25.73
+BPP:0.037 PSNR:25.77
+Original
+BPP:0.217 PSNR:34.00
+BPP:0.310 PSNR:32.99
+(a)
+(b)
+Figure 10: Failure examples.
+D Why not artifact correction for JPEG2000?
+The most direct way to improve the quality of satellite images is to use artifact correction on JPEG2000 compressed images. This approach does not introduce the computational burden on the satellite and can also improve image quality to a certain extent. We use DDRM [33], which is an image restoration method, for JPEG2000 compressed images to remove the artifact. As shown in
+17
+
+
+Table 4: The results of different random seeds for fMoW dataset. bpp PSNR MS-SSIM LPIPS FID 0.31 25.3698 ± 0.0447 0.9521 ± 0.0004 0.1040 ± 0.0010 31.2750 ± 0.4328 0.46 27.2411 ± 0.0222 0.9682 ± 0.0004 0.0761 ± 0.0006 23.0243 ± 0.2253 0.61 28.6654 ± 0.0251 0.9799 ± 0.0004 0.0461 ± 0.0004 19.4264 ± 0.1059 0.76 29.3617 ± 0.0608 0.9852 ± 0.0006 0.0363 ± 0.0007 16.9090 ± 0.1683
+Figure 11, JPEG2000+DDRM is slightly better than JPEG2000 but the improvement is limited, and there is still a big gap with COSMIC. We believe that this is mainly due to the fact that traditional compression methods based on static compression procedures cannot fit the data well like neural networks, and therefore lose a large amount of information, making image restoration methods difficult to improve the image quality. As a result, it is necessary to design a learned compression method to improve satellite image compression quality without introducing excessive computational burden on the satellite.
+0.3 0.4 0.5 0.6 0.7 bpp
+25
+26
+27
+28
+29
+PSNR
+JPEG2000 JPEG2000+DDRM COSMIC
+0.3 0.4 0.5 0.6 0.7 bpp
+0.94
+0.95
+0.96
+0.97
+0.98
+MS-SSIM
+0.3 0.4 0.5 0.6 0.7 bpp
+0.991
+0.992
+0.993
+0.994
+0.995
+0.996
+0.997
+0.998
+0.999 CW-SSIM
+0.3 0.4 0.5 0.6 0.7 bpp
+0.03
+0.04
+0.05
+0.06
+0.07
+0.08
+0.09
+GMSD
+Figure 11: Comparison results of COSMIC, JPEG2000 and JPEG2000+DDRM.
+E Influence of random seed
+To show the influence of different initial gaussian noise on the quality of reconstructed images, we randomly select 5 different seeds for each bit rate and show the 2-Sigma Error Bars results in Table 4. The results demonstrate that our method has small variances in various quantitative metrics, proving the robustness of our method to initialized random Gaussian noise.
+F Additional visualization of reconstructed images
+We show the full images of Figure 4 and Figure 5in the main paper, and give more visualization results, as shown in Figure 12 ∼ 25. We select visualization results for two different test sets under higher bitrates and lower bitrates from each dataset. For the tile test set, under lower bitrates, as shown in Figure 5 in the main paper, the reconstructed images by the baselines exhibit noticeable discontinuities at the stitching seams.
+18
+
+
+Original COSMIC [0.21bpp/PSNR:28.70]
+CDC [0.28bpp/PSNR:28.54] JPEG2000 [0.29bpp/PSNR:27.86]
+HIFIC [0.19bpp/PSNR:27.62] COLIC [0.20bpp/PSNR:27.28]
+Figure 12: Reconstructed fMoW images under low bitrates.
+19
+
+
+Original COSMIC [0.75bpp/PSNR:30.85]
+CDC [0.82bpp/PSNR:30.28] JPEG2000 [0.79bpp/PSNR:29.14]
+HIFIC [0.68bpp/PSNR:29.36] COLIC [0.74bpp/PSNR:29.06]
+Figure 13: Reconstructed fMoW images under high bitrates.
+20
+
+
+Figure 14: Ground truth.
+Figure 15: Low bpp: COSMIC, PSNR=24.75, bpp=0.30.
+21
+
+
+Figure 16: Low bpp: HIFIC, PSNR=24.04, bpp=0.24.
+Figure 17: Low bpp: COLIC, PSNR=23.77, bpp=0.24.
+22
+
+
+Figure 18: Low bpp: CDC, PSNR=24.82, bpp=0.41.
+Figure 19: Low bpp: JPEG2000, PSNR=24.41, bpp=0.38.
+23
+
+
+Figure 20: Ground truth.
+Figure 21: High bpp: COSMIC, PSNR=30.73, bpp=0.67.
+24
+
+
+Figure 22: High bpp: HIFIC, PSNR=29.77, bpp=0.65.
+Figure 23: High bpp: COLIC, PSNR=29.82, bpp=0.70.
+25
+
+
+Figure 24: High bpp: CDC, PSNR=30.21, bpp=0.75.
+Figure 25: High bpp: JPEG2000, PSNR=28.95, bpp=0.69.
+26
