@@ -1,0 +1,326 @@
+Leveraging Diffusion Knowledge for Generative Image Compression with
+Fractal Frequency-Aware Band Learning
+Lingyu Zhu1, Xiangrui Zeng1, Bolin Chen1, Peilin Chen1, Yung-Hui Li2, Shiqi Wang1* 1City University of Hong Kong; 2Hon Hai Research Institute
+Corresponding Author: shiqwang@cityu.edu.hk
+Figure 1. Motivation and superiority. The visual results show the directional frequency bands captured through the designed FFAB block. Each frequency band demonstrates distinct characteristics, allowing for an intuitive understanding of the inherent fractal patterns within natural image. (b) Our FFAB-IC network could deliver a significant performance improvement on the Kodak dataset in terms of DISTS value.
+Abstract
+By optimizing the rate-distortion-realism trade-off, generative image compression approaches produce detailed, realistic images instead of the only “sharp-looking” reconstructions produced by rate-distortion optimized models. In this paper, we propose a novel deep learning-based generative image compression method injected with diffusion knowledge, obtaining the capacity to recover more realistic textures in practical scenarios. Efforts are made from three perspectives to navigate the rate-distortion-realism trade-off in the generative image compression task. First, recognizing the strong connection between image texture and frequency-domain characteristics, we design a Fractal Frequency-Aware Band Image Compression (FFAB-IC) network to effectively capture the directional frequency components inherent in natural images. This network integrates commonly used fractal band feature operations within a neural non-linear mapping design, enhancing its ability to retain essential given information and filter out unnecessary details. Then, to improve the visual quality of image reconstruction under limited bandwidth, we integrate diffusion knowledge into the encoder and implement diffusion iterations into the decoder process, thus effectively recovering lost texture details. Finally, to fully leverage the spatial and frequency intensity information, we incorporate frequency- and content-aware regularization terms
+to regularize the training of the generative image compression network. Extensive experiments in quantitative and qualitative evaluations demonstrate the superiority of the proposed method, advancing the boundaries of achievable distortion-realism pairs, i.e., our method achieves better distortions at high realism and better realism at low distortion than ever before. Code will be available at https: //github.com/xxx.git.
+1. Introduction
+In recent years, learned image compression (LIC) techniques have gained considerable attention, showing superior performance compared to traditional codecs [55]. Nonetheless, distortion-focused convolutional neural network (CNN) compression approaches [43, 67] and transformer-based methods [31, 68] solely optimize the rate-distortion trade-off, leading to visually unpleasing results at low bitrates. These efforts have yielded ”artifactladen” results, characterized by issues such as blurring and excessive smoothing. Simply put, these results are “correct” in the pixel optimization domain, but they fail to align with “human perception” and “semantic consistency” due to the absence of perceptual supervision [26] and adversarial supervision [19] within the optimization space. To prioritize visually pleasing consistency, pioneering researchers explore perceptual-focused learned compression methods [2, 8, 9, 45] that leverage generative ad
+1
+arXiv:2503.11321v1 [cs.CV] 14 Mar 2025
+
+
+Input Data Input Data FFT
+Convolution FFAB-IC Network
+(a) Existing Methods (b) Our Compression method
+FFT Operation
+Noise
+Stable Diffusion
+Injection
+Isotropic and Anisotropic Features
+Amplitude Phase
+Figure 2. Comparison of our generative image compression technique with existing methods. (a) Previous frequency-domain image processing methods (e.g., [31, 47, 56]) analyze the spectrum. (b) The FFAB-IC network utilizes frequency fractal bands, including both isotropic and anisotropic features, while embedding an injected diffusion prior into the compression framework.
+versarial networks (GANs) to improve the perceptual quality of output. The release of diffusion model (DM) techniques [23, 50, 54] has opened up new opportunities. It has shown remarkable performance in various image tasks, such as image super-resolution [51] and image enhancement [24, 38], etc. The primary success of these algorithms in low-level tasks can be attributed to the utilization of pretrained diffusion models The generative image compression technique fundamentally relies on signal synthesis, emphasizing the importance of explicitly capturing the frequency band dependencies of images to recover texture details. While existing learned generative image compression methods have shown good performance [33, 41, 60, 67], they often fall short in interpreting the frequency characteristics of natural images, as illustrated in Fig. 2. In light of this, we review various classical band filter representations, such as wavelets [16], steerable filters [17], wiener filters [47], and ringlets [15], along with related processing methods [31, 46, 66]. This exploration inspires us to leverage frequency techniques and their diverse applications, paving the way for a new paradigm in the rate-distortion-realism tradeoff. Our aim is to push the boundaries of achievable distortion and realism in generative image compression. In the realm of image compression, the diffusion model governs the generation process by conditioning constrained latent variables, enabling a more nuanced approach to recovering lost details. However, directly applying stable diffusion for learned generative image compression is not practical, and current generative image compression methods still face several challenges, which we summarize as follows: • Despite the success of pre-trained stable diffusion, the inability to directly utilize pre-trained stable diffusion models in codec design stems from their fundamental architectural differences and operational constraints. As such, bridging the gap between these two domains requires innovative strategies that can leverage the strengths of stable diffusion while addressing the limitations imposed by codec functionalities.
+• Generative models prioritize producing high-quality content without bitrate supervision, while compression techniques aim to efficiently represent and reconstruct original images within limited bitrates following Shannon’s information theory [52]. The inherent conflict between the stochastic nature of the diffusion process and the constraints imposed by bitrate requirements presents a significant issue.
+To solve the above-mentioned challenges, we aim to develop the generative compression architecture that bridges the two regimes, effectively harmonizing the ratedistortion-realism trade-off between diffusion knowledge and compression techniques. The proposed FFAB-IC network integrates generative prior with compression techniques by designing the Fractal Frequency-Aware Band (FFAB) block, which has two notable characteristics. Firstly, it connects frequency band recovery theory under a rate constraint, allowing it to efficiently capture the directional frequency components within the natural image through isotropic and anisotropic window attention. That is, the majority of image information is contained in the lowfrequency component, which serves as the basic element, while a smaller portion of texture details is found in the high-frequency components, which helps capture potential hierarchical dependencies among frequency band features. Secondly, the designed FFAB block integrates a generative prior to the encoding and decoding processes, thus enhancing the performance of image realism. Connecting it within a unified block enhances frequency band learning under rate constraints, resulting in superior texture modeling capacity. Additionally, frequency-aware and content-aware supervision is employed to regularize network training to enhance the modeling capability. This approach ensures consistency in the extracted features, promoting a more robust and effective representation during the compression process. The main contributions of our work are as follows,
+• We propose an innovative pipeline that integrates generative perceptual knowledge for image compression, tackling the critical challenge of balancing rate, distortion, and realism. This method addresses the inherent conflict between the stochastic nature of the diffusion process and the deterministic requirements of image compression. • We design a FFAB-IC network, which integrates and leverages the designed FFAB block to capture directional frequency components of natural images, enabling adaptive latent representation in an end-to-end manner. • We employ the frequency-aware and content-aware supervision constraints to regularize the training of the FFAB-IC model. This constraint modulates the compression network to align with the diffusion perception space. • We conduct extensive experiments to validate the proposed FAFB-IC model. The results demonstrate that it significantly outperforms various baseline models across
+2
+
+
+multiple public benchmarks. Furthermore, it excels compared to competitors in terms of visual perception quality in real-world scenarios.
+2. Related Work
+Neural Image Compression. In recent years, neural image compression methods based on Variational Autoencoders (VAEs), introduced by Balle ́ et al. [4], have seen significant advancements. Subsequent works have achieved even greater performance, showcasing impressive rate-distortion efficiency [5, 21, 37, 42, 67]. Neural image compression models typically incorporate three main components: an encoder, a decoder, and an entropy model. A significant focus in recent research has been on enhancing compression performance through various entropy modeling techniques. Notable approaches include the hyperprior model [5], context-adaptive models [29, 43], transformerbased context models [28, 48], and the checkerboard context model [20]. Various architectures have been introduced for the encoder and decoder components to balance longrange modeling, nonlinear capacity, and efficiency. These include attention layers [10, 12], Swin Transformer-based architectures [57, 68, 69] and mixed CNN-Transformer blocks [37]. The frequency characteristics of natural images in neural image compression models have also been investigated [18, 39, 63], following traditional method [40]. Ma et al. [39] introduce a wavelet-like transform, but their reliance on the lifting scheme restricts the representation ability and constrains the latent space. Gao et al. [18] propose a frequency decomposition model that processes low- and high-frequency components separately, yet this approach does not fully address the limitations of the traditional paradigm. Zafari et al. [63] utilize attention mechanism to disentangle these frequency components.
+Generative Neural Image Compression. To improve the realism of decoded images, researchers have integrated GAN [19] and diffusion model [23] into the neural image compression framework. Following the groundbreaking work by Rippel et al. [49], numerous studies have focused on improving the performance and training stability of GAN-based methods [3, 41]. For example, Agustssonet al. [3] propose a conditional generator that allows the trade-off of distortion-realism within a unified model. An exception to this trend is found in diffusion-based methods [33, 34, 60]. Recently, diffusion models have begun to compete with GAN-based approaches, frequently delivering image samples of comparable or superior quality. Diffusion Models. Denoising diffusion implicit models [23, 54], renowned for their strong generative abilities, convert random noise into organized data via a series of iterative denoising steps. The latent diffusion model (LDM) [50] significantly reduces computational costs by performing diffusion and reverse steps in the latent space, with stable diffusion being a commonly used application of
+LDM. However, certain applications that utilize diffusion models have highly complex structures [11, 38, 62]. Recent algorithms, such as those proposed by [36, 44], incorporate additional trainable networks that introduce external conditions to fixed, pre-trained models. This approach streamlines the training process by eliminating the need for exhaustive training from the ground up while still leveraging the strong capabilities of pre-trained diffusion models.
+3. Methodology
+Motivation. The strong generative capabilities of stable diffusion inspire us to investigate a distortion-realism tradeoff approach for image compression. Two drawbacks hinder existing generative compression methods in real-world scenarios. Firstly, retrieving high-frequency details becomes challenging when inputs experience significant degradation at low bit rates through discriminative learning [59]. Secondly, generative compression methods often neglect the significance of frequency band information, resulting in missing texture details. As illustrated in Fig. 3, the architecture of the proposed FFAB-IC network is presented to address this challenging issue. The core design is built upon the FFAB block, enabling non-linear latent representation mapping for better compression. The FFAB block introduces frequency decomposition window attention in a fractal structure, band split, band refinement, and band fusion to capture low-frequency BLL, high-frequency BHH , vertical BHL, and horizontal components BLH , along with a frequency modulation technique for the adaptive adjustment of these components.
+3.1. Preliminaries Preliminary on Compression Model. A neural image compression method comprises three fundamental components [41]: an encoder E, a decoder G, and an entropy model P . Specifically, the encoder E transforms an input image x into a quantized latent representation y = E(x). The decoder G takes the latent representation y, generating a reconstruction of the original image x′ = G(y). The total objective is to minimize the rate-realism trade-off [13] as follows,
+Ltotal = Ex∼pX [λR(y) + D (x, x′)] . (1)
+The rate is estimated through the cross-entropy measure, defined as R(y) = − log P (y). Furthermore, D(x, x′) represents the metric that is used to evaluate the realism of the decoded image.
+Preliminary on Diffusion Model. Diffusion model [23] is the generative framework that systematically adds noise to data and subsequently learns to reverse this process for sample generation. This pipeline begins with a real data distribution x ∼ pX , where an initial data point x0 is progressively transformed into noise across multiple time steps, denoted as t = 1, 2, . . . , T . In each step, the data transitions toward randomness, with the noise level determined
+3
+
+
+Conv k1s1
+Conv k1s1
+Conv k1s1
+Split Operation
+Concat Operation
+Conv k1s1
+BLH
+k
+FFT Operation
+Block Merging
+Block Partitioning
+IFFT Operation
+.
+W
+BLL
+k BHH
+k
+BHL
+k
+Frozen Model Multiplication . Addition Forward Injected Knowledge
+Fractal Frequency-Aware Band (FFAB) Block
+Fractal Band Frequency Operation
+RS
+RS ↓2
+FFAB
+FFAB
+Conv k3s1
+IAT
+Conv k3s1
+Injection Affine Transformation (IAT)
+Conv k3s1
+Leaky ReLU
+Conv k3s1
+Diffusion Knowledge
+Prior
+Conv k3s1
+RS Residual Block
+Conv k3s1
+IAT
+Conv k5s2
+IAT
+Conv k5s2
+IAT
+Conv k1s1
+Hyper-Encoder
+AE
+AD
+Context
+Quantization
+Q
+Diffusion Process
+Conv k3s1
+FFAB
+RS ↑2
+FFAB
+Conv k3s1
+IAF
+IAF
+Decoder
+Conv k3s1
+Conv k3s1
+IAF
+IAF
+Extraction
+RS ↓2
+FFAB
+Encoder
+Conv k3s1
+IAT
+Conv k5s2
+IAT
+GELU
+GELU
+AE
+QQ
+AD
+ConvTrans k5s2
+GELU
+ConvTrans k3s1
+ConvTrans k5s2
+GELU
+Hyper-Decoder
+xT
+Figure 3. Overview of the Proposed Fractal Frequency-Aware Band Image Compression (FFAB-IC) Framework. Our FFAB-IC framework leverages a pre-trained Stable Diffusion, integrating generative prior knowledge with Fractal Frequency-Aware Band information to enhance contextual understanding in two key aspects: (a) Feature Level Operation: the framework enables window attention interactions across low-frequency, high-frequency, vertical, and horizontal bands. This allows for effective integration between generative features and image features in the representation space. (b) Optimization-Level Guidance: we introduce frequency domain constraints into the computation of content representation.
+by a time-varying parameter βt, which increases over time. Eventually, after sufficient iterations, the data distribution approaches a standard normal distribution, represented as xt ∼ N (0, I). To generate new samples, the model reverses this process by reconstructing the original data x0 from the noisy input xt. This is accomplished by learning the denoising function with a neural network, parameterized by θ, which outputs the clean data mean μθ(xt, t) and the associated noise variance σ2(t).
+Fractal Frequency-Aware Band Learning. Fractal Band Learning represents a promising paradigm for analyzing signals across different sub-bands, enabling the capture of intricate details [53]. Observations from [31] inspire us that typical self-attention acts as a low-pass filter. Utilizing the isotropic and anisotropic windows could capture the directional frequency components within natural images, which is seldom investigated in fractal band learning. As such, we focus on analyzing specific aspects of band recovery characteristics writing into the compact bitstream. The signal
+is reconstructed using a two-step process. 1). The residual block FRB generates a new band signal fk based on the previous band estimator fk−1. 2). A summation combines the new band signal (residue) FRB(fk−1) with the previous band estimator fk−1 as follows,
+fk = FRB (fk−1) + fk−1, (2)
+wherein FRB(·) denotes the operation of the residual block and fk denotes the four band features in the frequency domain (i.e., isotropic and anisotropic features). Compared to existing methods in [53, 61], our uniquely designed block effectively separates the feature signal into multiple components with distinct intrinsic frequencies, namely low-frequency, high-frequency, vertical, and horizontal bands. These components, referred to as {BLL, BHH , BHL, BLH }, are modeled individually. That is, the majority of image information is contained in the low-frequency component, which serves as the basic element, while a smaller portion of texture details is found in the high-frequency components, which helps capture poten
+4
+
+
+0.0 0.2 0.4 0.6 0.8
+Bitrate (bpp)
+5
+25
+45
+65
+85
+FID
+Kodak (FID)
+VTM HiFiC MS-ILLM CDC ( = 0.9) CRDR ( = 3.84) MPA (PERC.) Ours
+0.0 0.2 0.4 0.6 0.8
+Bitrate (bpp)
+0.00
+0.05
+0.10
+0.15
+0.20
+DISTS
+MS-COCO 30K (DISTS)
+VTM HiFiC MS-ILLM CDC ( = 0.9) CRDR ( = 3.84) MPA (PERC.) Ours
+0.0 0.2 0.4 0.6 0.8
+Bitrate (bpp)
+0
+5
+10
+15
+20
+FID
+MS-COCO 30K (FID)
+VTM HiFiC MS-ILLM CDC ( = 0.9) CRDR ( = 3.84) MPA (PERC.) Ours
+0.0 0.2 0.4 0.6 0.8
+Bitrate (bpp)
+0.00
+0.05
+0.10
+0.15
+0.20
+DISTS
+Kodak (DISTS)
+VTM HiFiC MS-ILLM CDC ( = 0.9) CRDR ( = 3.84) MPA (PERC.) Ours
+Figure 4. Illustration of DISTS ↓ and FID ↓ results based on the evaluation metrics outlined in 4.1. More results can be found in the supplementary material. The proposed compression method (bottom left) significantly outperforms the baseline methods. Zooming in on the figure will provide a better look at the RD curve comparison results.
+tial hierarchical dependencies among frequency band features We visualize the corresponding bands for intuitive understanding, as shown in Fig. 1 (a).
+3.2. Generative Compression Framework
+Overall. The generative feature derived from the pretrained stable diffusion yd = Fd(x) is extracted from raw image x for utilization. Similarly, the analysis transforms Fa(·) maps x to a latent representation y. The hyperinformation is derived using a pair of hyper encoder Ha(·) and hyper decoder Hd(·). Q(·) denote the quantization operator. The encoding (Enc.) process can be summarized as follows,
+Enc. y = Fa(x, yd), yˆ = Q(y), (3)
+z = Ha(y, yd), zˆ = Q(z). (4)
+Given the transmitted yˆ and zˆ, we further use the information extraction function Hw
+d (zˆ), which has the same architecture as the hyper-decoder. Following the framework of the previous channel-wise autoregressive entropy model [21], we divide y into 10 uneven slices to enhance the encoding of subsequent slices. We decode yˆ into a content representation zc. Then the content representation zc is further decoded in the subsequent image reconstruction stage
+using stable diffusion Gt. This decoding (Dec.) process can be expressed as follows,
+Dec. zc = Fd(yˆ, Hw
+d (zˆ)), (5)
+ˆx = Gt(zc), t = 1, 2, . . . , T. (6)
+Fractal Frequency-Aware Band (FFAB) Block. The designed FFAB block integrates both isotropic and anisotropic window attention mechanisms in the frequency domain. The core function lies in the fact that isotropic attention treats all directions equally and is effective in capturing regular patterns, while anisotropic attention enables varying attention patterns based on direction. Then, the adaptive attention mechanism is designed to encode various patterns into a compact bitstream, facilitating subsequent texture recovery under the rate constraints. In our experiments, the various window sizes allow the designed FFAB to effectively capture low-frequency, high-frequency, vertical, and horizontal components. These window configurations correspond to the respective frequency and directional characteristics. Specifically, we begin by linearly projecting the latent features into K heads. These heads are then evenly divided into four parallel groups, each containing K
+4 heads. Each group employs a distinct self-attention mechanism,
+5
+
+
+Table 1. BD-rate (%) comparison is calculated on the Kodak [27], DIV2k [1] and MS-COCO 30K [35] datasets, wherein the HiFiC is the anchor. [Key: Best, Second Best, ↓ (↑): Smaller (larger) values denote better performance]. “-” indicates that the range is outside the scope of calculating the BD-rate.
+Methods Venue Kodak DIV2K MS-COCO 30K
+DISTS ↓ FID ↓ DISTS ↓ FID ↓ DISTS ↓ FID ↓ VVC [6] TCSVT 2021 - - - - - HiFiC [41] NIPS 2020 0.00% 0.00% 0.00% 0.00% 0.00% 0.00% MS-ILLM [45] ICML 2023 -41.52% -41.43% -41.91% -38.27% +49.26% CDC (ρ = 0.9) [60] NIPS 2024 +67.97% -46.39% -46.39% -5.34% +36.45% CRDR (β = 3.84) [25] WACV 2024 -31.88% -13.19% -30.16% - -25.88% MPA (PERC.) [65] NIPS 2024 -64.25% -51.30% - -46.45% -64.13% -48.67% Ours - -75.50% -73.21% -57.45% -40.86% -83.09% -84.37%
+and the outputs from these four groups are concatenated to form the overall output. Recognizing that the contributions of these frequency components to compression are not equal, we utilize the Fast Fourier Transform (FFT) to convert the content variables from the spatial domain to the frequency domain. Specifically, we apply a block-based FFT to the features obtained from a standard feed-forward network (FFN). Next, we introduce a learnable filter matrix W to suppress or amplify the various frequency components selectively. A frequency-modulation feed-forward network then modulates the decomposed components to reduce potential redundancy across different frequency components. This process can be formally expressed as follows,
+FFAB(X) = Concat [head1, . . . , headK ] W , (7)
+wherein
+headk =
+
+   
+   
+Bk
+LL for k = 1, . . . , K
+4 Bk
+HH for k = K
+4 + 1, . . . , 2K
+4 Bk
+HL for k = 2K
+4 + 1, . . . , 3K
+4 Bk
+LH for k = 3K
+4 + 1, . . . , K
+(8)
+and W is the projection matrix that implements interaction between different frequency components.
+Injection Affine Transformation (IAF). As shown in Fig. 3, we introduce an injection affine transformation to incorporate generative knowledge yi
+d into the encoder and decoder of our compression pipeline. This mechanism facilitates the integration of stable diffusion knowledge prior to adaptively modifying the compressed features, effectively merging spatial and frequency information. Herein, the final feature leverages trainable scale (expressed as Eq. (9)) and shift (expressed as Eq. (10)) factors to refine the learnable distribution.
+γ = Wgamma ∗ yd + bgamma, (9)
+β = Wbeta ∗ yd + bbeta, (10)
+As a result, we apply equivalent transformations to these features, balancing the distribution of activations and weights and making the model more suitable for neural feature compression. This simple process is expressed as fol
+lows, y = y · (1 + γ) + β. (11)
+3.3. Optimization
+The total loss for the proposed generative image compression method is defined as,
+LTotal = λ1Lrate
+| {z }
+rate term
++ λ2Lspatial
+| {z }
+spatial term
++ λ3Lfrequency
+| {z }
+frequency term
++ λ4Lnoise
+| {z }
+diffusion term
+(12) wherein λ1, λ2, λ3 and λ4 represent the weights assigned to the rate constraint, spatial content, frequency content, and diffusion loss, respectively. Rate Constraint. We utilize the rate loss Lrate to estimate the rate performance, defined as follows:
+Lrate =R(yˆ) + R(zˆ), (13)
+where R(·) denotes the bit rates of the latent representation. Spatial Domain Constraint. In the proposed FFAB-IC network, we employ the spatial domain constraint to ensure that the content variables align with the diffusion content space, thereby providing essential constraints for optimization. This process could be expressed as follows,
+Lspatial = ∥zc − Fd(x)∥2 (14)
+Frequency Domain Constraint. Motivated by distance measurement in the frequency domain [30], we further employ the FFT operation to convert the content variables from the spatial domain to the frequency domain. We then compare the differences in the amplitude component A and the phase component P as follows,
+LFrequency = ∥A(zc) − A(Fd(x))∥2+∥P (zc) − P (Fd(x))∥2 (15) Diffusion Term. To estimate the noise, the introduction of the external content condition zc.
+Lnoise = Ez0,t,ε,zc ∥ε − εθ (zt, t, c, zc)∥2 (16)
+wherein the c is the empty text condition.
+4. Experiments 4.1. Experiment Settings
+Dataset. The proposed method is trained on the LSDIR [32] dataset, which contains 84,911 high-quality im
+6
+
+
+(a) Bpp | FID | DISTS (b) 0.1322 | 53.73 ↓ | 0.0843 ↓ (c) 0.1354 | 39.36 ↓ | 0.0676 (d) 0.1465 | 22.48 ↓ | 0.0454 ↓
+Figure 5. Visual comparison of compression methods (a) VTM [6], (b) HiFiC [41], (c) CRDR [25], and (d) Ours. Our method could effectively maintains fine details and improve overall image quality, as evidenced by the clarity in zoomed-in areas.
+ages. We adopt three testing datasets to evaluate the effectiveness of the proposed compression method. a) Kodak [27]: This dataset includes 24 images, each sized either 512 x 768 or 768 x 512 pixels. b) DIV2K [1]: The validation set has 100 high-quality images, each with a resolution of 2000 pixels. c) MS-COCO 30K [35]: The data set comprises 30,000 images sourced from the MS-COCO 2017 training set, which is used to assess the realism of compression methods, following previous research [7]. Evaluation Metrics. We adopt the Deep Image Structure and Texture Similarity (DISTS) [14], Fre ́chet Inception Distance (FID) [22], Learned Perceptual Image Patch Similarity (LPIPS) [64], Peak Signal-to-Noise Ratio (PSNR) and Multiscale Structural Similarity (MS-SSIM) [58] to evaluate the quality of the decompressed images. For calculating FID, we follow the protocol established in previous works [3, 41] to ensure a robust quality evaluation. Baseline Methods. We compare the proposed method against 6 representative image compression methods, which include 1 traditional codec, 2 GAN-based codecs, 1 diffusion-based methods, and 2 unified codecs. In particular, these include the traditional compression standard VVC Intra (VTM-12.0) [6], GAN-based compression methods such as HiFiC [41] and MS-ILLM [45], diffusion-based method include Conditional Diffusion Compression (CDC, ρ = 0.9) [60]. Additionally, we also evaluate unified models, including MPA (PERC.) [65] and CRDR (β = 3.84) [25] that focus on rate-perception performance.
+4.2. Experimental Results Quantitative Comparisons. Tab. 1 and Fig. 4 provide a quantitative comparison between our proposed compression method and other leading methods. We utilize HiFiC as the anchor for calculating the BD-rate, allowing us to assess performance improvements across three testing datasets:
+Table 2. Encoding (Enc.) and decoding (Dec.) time (seconds), as well as BD-rate (FID) (%) computed on the Kodak dataset [27] are summarized using an Nvidia GPU 3090, with HiFiC serving as the anchor.
+Methods Enc. Time Dec. Time BD-rate HiFiC [41] 0.598 1.374 0.00% MS-ILLM [45] 0.434 0.101 -41.43% CDC (ρ = 0.9) [60] 1.087 0.008 -40.15% CRDR (β = 3.84) [25] 3.269 0.896 -13.19% MPA (PERC.) [65] 0.386 0.330 -51.30% Ours 0.507 0.221 -73.21%
+Kodak, DIV2K, and MS-COCO 30K. Observation: We achieve the BD-rate improvements on the Kodak dataset, with a remarkable performance of -75.50% in DISTS and -73.21% in FID, underscoring the ability to preserve image quality while compressing data effectively. On the DIV2K dataset, our compression method could obtain DISTS and FID gain by -57.45% and -40.86%, respectively. For the MS-COCO 30K dataset, our method exhibits even more remarkable improvements, achieving -83.09% in DISTS and 84.37% in FID, indicating that our model outperforms other methods in complex image scenarios. Analysis: The results demonstrate that our proposed method is a competitively effective learned generative image compression technique. It achieved first place across all three datasets in terms of DISTS and FID scores, highlighting the effectiveness of our generative image compression.
+Qualitative Comparisons. We provide qualitative comparisons to visually assess the performance of our compression method alongside eight state-of-the-art techniques. Fig. 5 illustrates the results of our method in comparison to others constrained by the similar Bpp. The output of our method showcases a comparison with other techniques, highlighting its ability to preserve fine details, especially in zoomed
+7
+
+
+0.06 0.08 0.10 0.12 0.14 0.16
+Bpp
+23.0
+23.5
+24.0
+24.5
+25.0
+25.5
+26.0
+PSNR (dB)
+Window 2 PSNR Window 4 PSNR Window 8 PSNR
+30
+35
+40
+45
+50
+55
+60
+FID
+Window 2 FID Window 4 FID Window 8 FID
+Figure 6. Illustration of the relationship between bits per pixel (Bpp) and the corresponding PSNR and FID values for window 2, 4, and 8 settings.
+in areas. In contrast, the first three images demonstrate the output of the competing methods, which exhibits noticeable blurriness and loss of detail in the same region. Complexity Comparisons. Tab. 2 summarizes the average encoding and decoding times for compared methods on the Kodak dataset. Observation: The table presents encoding and decoding times, along with BD-rate performance, for various methods evaluated on the Kodak dataset using an Nvidia GPU 3090. The encoding times vary across methods, with HiFiC taking 0.598 seconds. Notably, our method demonstrates a competitive encoding time of 0.507 seconds. Analysis: The results illustrate a clear trade-off between encoding and decoding times and compression performance. Methods like CRDR exhibit longer encoding and decoding times while only achieving a BD-rate performance of -13.19%. In contrast, our method strikes a balance, providing both rapid encoding and decoding times alongside an impressive BD-rate performance (-73.21%).
+FFAB Block Performance Under Different Settings. In our experiments, the FFAB block aims to capture the lowfrequency, high-frequency, vertical, and horizontal bands, which are highly correlated with the window size. Observation: Fig. 6 analyzes the impact of different window sizes on compression performance, which is unique in the FFAB block design. Herein, the Window 8 settings denote the following window sizes 8∗2×8∗2, 8/2×8/2, 8∗2×8/2, and 8/2 × 8 ∗ 2 to capture the isotropic and anisotropic features. The Window 4 setting and Window 2 setting are also similar. Our findings indicate that increasing the window size results in a decline in performance, as measured by PSNR and FID. Analysis: Smaller window sizes allow the generative image compression model to focus on local features more effectively. This leads to a better capture of fine-grained details in decoded images, ultimately enhancing the overall compression performance of the proposed model.
+FFAB Performance under different rate. To further assess the effectiveness of the FFAB block performance under different rates, we present the results in Fig. 7 to visualize and support the contributions. Observation: The structure
+Figure 7. We visualize the low-frequency band under various rate constraints. The first image corresponds to 0.1169 bpp, while the second image corresponds to 0.0876 bpp. This visualization showcases the differing bit rates across various regions.
+and texture are highly activated at 0.1169 bpp. As the bit rate decreases to 0.0876 bpp, the activated areas change accordingly, indicating a shift in emphasis across the regions of interest. Analysis: We can conclude that the FFAB effectively adapts to varying bit rates by reallocating resources to maintain crucial features at lower rates. The reduction in activation in specific areas at 0.0876 bpp suggests that the model prioritizes certain textures and structures over others, ensuring that essential information is preserved even under tighter constraints.
+5. Conclusion and Limitation
+In this paper, we present a novel Fractal Frequency-Aware Band Image Compression (FFAB-IC) learning network, trained with frequency-aware loss supervision, aimed at enhancing generative image compression by leveraging a powerful generative prior. Our approach is motivated by two key aspects. First, the reconstruction from content band representation closely aligns with frequency domain analysis, particularly in the context of image realism generation. To capitalize on this, we develop a fractal band learning network that performs frequency band feature operations, outperforming existing generative image compression methods across several common benchmarks. Second, we incorporate learned contextual features from natural images in various directional contexts, extracted through our fractal band after window attention operations. This strategy effectively perceives rich and spatial information through texture feature representations, significantly improving visual quality. Extensive experimental results validate the superiority of our method over previous approaches, highlighting the effectiveness of each component in the generative image compression process. Limitation: The processing time is limited due to the stable diffusion process, particularly in handling high-resolution images. As such, we tend to investigate the potential of the proposed method for the one-step acceleration technique in future work.
+8
+
+
+References
+[1] Eirikur Agustsson and Radu Timofte. Ntire 2017 challenge on single image super-resolution: Dataset and study. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition Workshops, pages 126–135, 2017. 6, 7 [2] Eirikur Agustsson, Michael Tschannen, Fabian Mentzer, Radu Timofte, and Luc Van Gool. Generative adversarial networks for extreme learned image compression. In Proceedings of the IEEE/CVF International Conference on Computer Vision, pages 221–231, 2019. 1 [3] Eirikur Agustsson, David Minnen, George Toderici, and Fabian Mentzer. Multi-realism image compression with a conditional generator. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, pages 22324–22333, 2023. 3, 7 [4] Johannes Balle ́, Valero Laparra, and Eero P. Simoncelli. End-to-end optimized image compression. In International Conference on Learning Representations, 2017. 3
+[5] Johannes Balle ́, David Minnen, Saurabh Singh, Sung Jin Hwang, and Nick Johnston. Variational image compression with a scale hyperprior. In International Conference on Learning Representations, 2018. 3
+[6] Benjamin Bross, Ye-Kui Wang, Yan Ye, Shan Liu, Jianle Chen, Gary J Sullivan, and Jens-Rainer Ohm. Overview of the versatile video coding (vvc) standard and its applications. IEEE Transactions on Circuits and Systems for Video Technology, 31(10):3736–3764, 2021. 6, 7 [7] Marlene Careil, Matthew J. Muckley, Jakob Verbeek, and Ste ́phane Lathuili`ere. Towards image compression with perfect realism at ultra-low bitrates. In The Twelfth International Conference on Learning Representations, 2024. 7
+[8] Bolin Chen, Shanzhi Yin, Zihan Zhang, Jie Chen, Ru-Ling Liao, Lingyu Zhu, Shiqi Wang, and Yan Ye. Beyond gfvc: A progressive face video compression framework with adaptive visual tokens. arXiv preprint arXiv:2410.08485, 2024. 1
+[9] Bolin Chen, Hanwei Zhu, Shanzhi Yin, Lingyu Zhu, Jie Chen, Ru-Ling Liao, Shiqi Wang, and Yan Ye. Plenogeneration: A scalable generative face video compression framework with bandwidth intelligence. arXiv preprint arXiv:2502.17085, 2025. 1
+[10] Tong Chen, Haojie Liu, Zhan Ma, Qiu Shen, Xun Cao, and Yao Wang. End-to-end learnt image compression via non-local attention optimization and improved context modeling. IEEE Transactions on Image Processing, 30:31793191, 2021. 3 [11] Xiaoxu Chen, Jingfan Tan, Tao Wang, Kaihao Zhang, Wenhan Luo, and Xiaochun Cao. Towards real-world blind face restoration with generative diffusion prior. IEEE Transactions on Circuits and Systems for Video Technology, 2024. 3
+[12] Zhengxue Cheng, Heming Sun, Masaru Takeuchi, and Jiro Katto. Learned image compression with discretized gaussian mixture likelihoods and attention modules. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Pecognition, pages 7939–7948, 2020. 3
+[13] Thomas M Cover. Elements of information theory. John Wiley & Sons, 1999. 3
+[14] Keyan Ding, Kede Ma, Shiqi Wang, and Eero P Simoncelli. Image quality assessment: Unifying structure and texture similarity. IEEE Transactions on Pattern Analysis and Machine Intelligence, 44(5):2567–2581, 2020. 7 [15] Minh N Do and Martin Vetterli. The contourlet transform: an efficient directional multiresolution image representation. IEEE Transactions on Image Processing, 14(12):2091–2106, 2005. 2 [16] Tim Edwards. Discrete wavelet transforms: Theory and implementation. Universidad de, 1991:28–35, 1991. 2 [17] William T Freeman, Edward H Adelson, et al. The design and use of steerable filters. IEEE Transactions on Pattern Analysis and Machine Intelligence, 13(9):891–906, 1991. 2 [18] Ge Gao, Pei You, Rong Pan, Shunyuan Han, Yuanyuan Zhang, Yuchao Dai, and Hojae Lee. Neural image compression via attentional multi-scale back projection and frequency decomposition. In Proceedings of the IEEE/CVF International Conference on Computer Vision, pages 1467714686, 2021. 3 [19] Ian Goodfellow, Jean Pouget-Abadie, Mehdi Mirza, Bing Xu, David Warde-Farley, Sherjil Ozair, Aaron Courville, and Yoshua Bengio. Generative adversarial nets. Advances in Neural Information Processing Systems, 27, 2014. 1, 3
+[20] Dailan He, Yaoyan Zheng, Baocheng Sun, Yan Wang, and Hongwei Qin. Checkerboard context model for efficient learned image compression. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, pages 14771–14780, 2021. 3 [21] Dailan He, Ziming Yang, Weikun Peng, Rui Ma, Hongwei Qin, and Yan Wang. Elic: Efficient learned image compression with unevenly grouped space-channel contextual adaptive coding. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, pages 57185727, 2022. 3, 5 [22] Martin Heusel, Hubert Ramsauer, Thomas Unterthiner, Bernhard Nessler, and Sepp Hochreiter. Gans trained by a two time-scale update rule converge to a local nash equilibrium. Advances in Neural Information Processing Systems, 30, 2017. 7 [23] Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. Advances in Neural Information Processing Systems, 33:6840–6851, 2020. 2, 3 [24] Jinhui Hou, Zhiyu Zhu, Junhui Hou, Hui Liu, Huanqiang Zeng, and Hui Yuan. Global structure-aware diffusion process for low-light image enhancement. Advances in Neural Information Processing Systems, 36, 2024. 2
+[25] Shoma Iwai, Tomo Miyazaki, and Shinichiro Omachi. Controlling rate, distortion, and realism: Towards a single comprehensive neural image compression model. In Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision, pages 2900–2909, 2024. 6, 7 [26] Justin Johnson, Alexandre Alahi, and Li Fei-Fei. Perceptual losses for real-time style transfer and super-resolution. In Computer Vision–ECCV 2016: 14th European Conference, Amsterdam, The Netherlands, October 11-14, 2016, Proceedings, Part II 14, pages 694–711. Springer, 2016. 1 [27] Kodak. Kodak lossless true color image suite. https:// r0k.us/graphics/kodak/, 2013. 6, 7
+9
+
+
+[28] A Burakhan Koyuncu, Han Gao, Atanas Boev, Georgii Gaikov, Elena Alshina, and Eckehard Steinbach. Contextformer: A transformer with spatio-channel attention for context modeling in learned image compression. In European Conference on Computer Vision, pages 447–463. Springer, 2022. 3 [29] Jooyoung Lee, Seunghyun Cho, and Seung-Kwon Beack. Context-adaptive entropy model for end-to-end optimized image compression. In International Conference on Learning Representations, 2019. 3
+[30] Gehui Li, Bin Chen, Chen Zhao, Lei Zhang, and Jian Zhang. Osmamba: Omnidirectional spectral mamba with dual-domain prior generator for exposure correction. arXiv preprint arXiv:2411.15255, 2024. 6
+[31] Han Li, Shaohui Li, Wenrui Dai, Chenglin Li, Junni Zou, and Hongkai Xiong. Frequency-aware transformer for learned image compression. In The Twelfth International Conference on Learning Representations, 2024. 1, 2, 4
+[32] Yawei Li, Kai Zhang, Jingyun Liang, Jiezhang Cao, Ce Liu, Rui Gong, Yulun Zhang, Hao Tang, Yun Liu, Denis Demandolx, et al. Lsdir: A large scale dataset for image restoration. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, pages 1775–1787, 2023. 6 [33] Zhiyuan Li, Yanhui Zhou, Hao Wei, Chenyang Ge, and Jingwen Jiang. Towards extreme image compression with latent feature guidance and diffusion prior. IEEE Transactions on Circuits and Systems for Video Technology, 2024. 2, 3
+[34] Zhiyuan Li, Yanhui Zhou, Hao Wei, Chenyang Ge, and Ajmal Mian. Diffusion-based extreme image compression with compressed feature initialization. arXiv preprint arXiv:2410.02640, 2024. 3
+[35] Tsung-Yi Lin, Michael Maire, Serge Belongie, James Hays, Pietro Perona, Deva Ramanan, Piotr Dolla ́r, and C Lawrence Zitnick. Microsoft coco: Common objects in context. In Computer Vision–ECCV 2014: 13th European Conference, Zurich, Switzerland, September 6-12, 2014, Proceedings, Part V 13, pages 740–755. Springer, 2014. 6, 7 [36] Xinqi Lin, Jingwen He, Ziyan Chen, Zhaoyang Lyu, Bo Dai, Fanghua Yu, Yu Qiao, Wanli Ouyang, and Chao Dong. Diffbir: Toward blind image restoration with generative diffusion prior. In European Conference on Computer Vision, pages 430–448. Springer, 2025. 3 [37] Jinming Liu, Heming Sun, and Jiro Katto. Learned image compression with mixed transformer-cnn architectures. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, pages 14388–14397, 2023. 3 [38] Riyu Lu, Lingyu Zhu, Baoliang Chen, Xiaopeng Fan, and Shiqi Wang. Diffusion-based bit-depth expansion. In 2024 IEEE 26th International Workshop on Multimedia Signal Processing (MMSP), pages 1–6. IEEE, 2024. 2, 3 [39] Haichuan Ma, Dong Liu, Ruiqin Xiong, and Feng Wu. iwave: Cnn-based wavelet-like transform for image compression. IEEE Transactions on Multimedia, 22(7):16671679, 2019. 3 [40] Stephane G Mallat. A theory for multiresolution signal decomposition: the wavelet representation. IEEE Transactions on Pattern Analysis and Machine Intelligence, 11(7):674693, 1989. 3
+[41] Fabian Mentzer, George D Toderici, Michael Tschannen, and Eirikur Agustsson. High-fidelity generative image compression. Advances in Neural Information Processing Systems, 33:11913–11924, 2020. 2, 3, 6, 7 [42] David Minnen and Saurabh Singh. Channel-wise autoregressive entropy models for learned image compression. In 2020 IEEE International Conference on Image Processing (ICIP), pages 3339–3343. IEEE, 2020. 3 [43] David Minnen, Johannes Ball ́e, and George D Toderici. Joint autoregressive and hierarchical priors for learned image compression. Advances in neural information processing systems, 31, 2018. 1, 3 [44] Chong Mou, Xintao Wang, Liangbin Xie, Yanze Wu, Jian Zhang, Zhongang Qi, and Ying Shan. T2i-adapter: Learning adapters to dig out more controllable ability for text-to-image diffusion models. In Proceedings of the AAAI Conference on Artificial Intelligence, pages 4296–4304, 2024. 3
+[45] Matthew J Muckley, Alaaeldin El-Nouby, Karen Ullrich, Herv ́e Je ́gou, and Jakob Verbeek. Improving statistical fidelity for neural image compression with implicit local likelihood models. In International Conference on Machine Learning, pages 25426–25443. PMLR, 2023. 1, 6, 7 [46] Zizheng Pan, Jianfei Cai, and Bohan Zhuang. Fast vision transformers with hilo attention. Advances in Neural Information Processing Systems, 35:14541–14554, 2022. 2
+[47] Subhajit Paul, Sahil Kumawat, Ashutosh Gupta, and Deepak Mishra. F2former: When fractional fourier meets deep wiener deconvolution and selective frequency transformer for image deblurring. arXiv preprint arXiv:2409.02056, 2024. 2 [48] Yichen Qian, Xiuyu Sun, Ming Lin, Zhiyu Tan, and Rong Jin. Entroformer: A transformer-based entropy model for learned image compression. In International Conference on Learning Representations, 2022. 3
+[49] Oren Rippel and Lubomir Bourdev. Real-time adaptive image compression. In International Conference on Machine Learning, pages 2922–2930. PMLR, 2017. 3 [50] Robin Rombach, Andreas Blattmann, Dominik Lorenz, Patrick Esser, and Bj ̈orn Ommer. High-resolution image synthesis with latent diffusion models. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, pages 10684–10695, 2022. 2, 3 [51] Chitwan Saharia, Jonathan Ho, William Chan, Tim Salimans, David J Fleet, and Mohammad Norouzi. Image super-resolution via iterative refinement. IEEE Transactions on Pattern Analysis and Machine Intelligence, 45(4):47134726, 2022. 2 [52] Claude E Shannon et al. Coding theorems for a discrete source with a fidelity criterion. IRE Nat. Conv. Rec, 4(142163):1, 1959. 2 [53] Abhishek Singh and Narendra Ahuja. Sub-band energy constraints for self-similarity based super-resolution. In International Conference on Pattern Recognition, pages 4447–4452. IEEE, 2014. 4 [54] Jiaming Song, Chenlin Meng, and Stefano Ermon. Denoising diffusion implicit models. arXiv preprint arXiv:2010.02502, 2020. 2, 3
+10
+
+
+[55] Gary J Sullivan, Jens-Rainer Ohm, Woo-Jin Han, and Thomas Wiegand. Overview of the high efficiency video coding (hevc) standard. IEEE Transactions on Circuits and Systems for Video Technology, 22(12):1649–1668, 2012. 1 [56] Chenxi Wang, Hongjun Wu, and Zhi Jin. Fourllie: Boosting low-light image enhancement by fourier frequency information. In Proceedings of the 31st ACM International Conference on Multimedia, pages 7459–7469, 2023. 2 [57] Meng Wang, Kai Zhang, Li Zhang, Yue Li, Junru Li, Yue Wang, and Shiqi Wang. End-to-end image compression with swin-transformer. In 2022 IEEE International Conference on Visual Communications and Image Processing (VCIP), pages 1–5. IEEE, 2022. 3 [58] Zhou Wang, Eero P Simoncelli, and Alan C Bovik. Multiscale structural similarity for image quality assessment. In The Thrity-Seventh Asilomar Conference on Signals, Systems & Computers, pages 1398–1402. Ieee, 2003. 7 [59] Zongliang Wu, Ruiying Lu, Ying Fu, and Xin Yuan. Latent diffusion prior enhanced deep unfolding for snapshot spectral compressive imaging. In European Conference on Computer Vision, pages 164–181. Springer, 2024. 3 [60] Ruihan Yang and Stephan Mandt. Lossy image compression with conditional diffusion models. Advances in Neural Information Processing Systems, 36, 2024. 2, 3, 6, 7
+[61] Wenhan Yang, Jiashi Feng, Jianchao Yang, Fang Zhao, Jiaying Liu, Zongming Guo, and Shuicheng Yan. Deep edge guided recurrent residual learning for image superresolution. IEEE Transactions on Image Processing, 26(12): 5895–5907, 2017. 4 [62] Zongsheng Yue and Chen Change Loy. Difface: Blind face restoration with diffused error contraction. IEEE Transactions on Pattern Analysis and Machine Intelligence, 2024. 3 [63] Ali Zafari, Atefeh Khoshkhahtinat, Piyush Mehta, Mohammad Saeed Ebrahimi Saadabadi, Mohammad Akyash, and Nasser M Nasrabadi. Frequency disentangled features in neural image compression. In 2023 IEEE International Conference on Image Processing (ICIP), pages 2815–2819. IEEE, 2023. 3 [64] Richard Zhang, Phillip Isola, Alexei A Efros, Eli Shechtman, and Oliver Wang. The unreasonable effectiveness of deep features as a perceptual metric. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition, pages 586–595, 2018. 7 [65] Xu Zhang, Peiyao Guo, Ming Lu, and Zhan Ma. All-in-one image coding for joint human-machine vision with multipath aggregation. In Advances in Neural Information Processing Systems, 2024. 6, 7
+[66] Lingyu Zhu, Wenhan Yang, Baoliang Chen, Fangbo Lu, and Shiqi Wang. Enlightening low-light images with dynamic guidance for context enrichment. IEEE Transactions on Circuits and Systems for Video Technology, 32(8):5068–5079, 2022. 2 [67] Lingyu Zhu, Binzhe Li, Riyu Lu, Peilin Chen, Qi Mao, Zhao Wang, Wenhan Yang, and Shiqi Wang. Learned image compression for both humans and machines via dynamic adaptation. In 2024 IEEE International Conference on Image Processing (ICIP), pages 1788–1794. IEEE, 2024. 1, 2, 3
+[68] Yinhao Zhu, Yang Yang, and Taco Cohen. Transformerbased transform coding. In International Conference on Learning Representations, 2022. 1, 3
+[69] Renjie Zou, Chunfeng Song, and Zhaoxiang Zhang. The devil is in the details: Window-based attention for image compression. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, pages 1749217501, 2022. 3
+11

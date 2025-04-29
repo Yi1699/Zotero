@@ -1,0 +1,373 @@
+Map-Assisted Remote-Sensing Image Compression at Extremely Low Bitrates
+Yixuan Ye, Ce Wang, Wanjie Sun,* Zhenzhong Chen School of Remote Sensing and Information Engineering, Wuhan University Wuhan 430079, China
+{yeyixuan, cewang, sunwanjie, zzchen}@whu.edu.cn
+Abstract
+Remote-sensing (RS) image compression at extremely low bitrates has always been a challenging task in practical scenarios like edge device storage and narrow bandwidth transmission. Generative models including VAEs and GANs have been explored to compress RS images into extremely low-bitrate streams. However, these generative models struggle to reconstruct visually plausible images due to the highly ill-posed nature of extremely low-bitrate image compression. To this end, we propose an image compression framework that utilizes a pre-trained diffusion model with powerful natural image priors to achieve high-realism reconstructions. However, diffusion models tend to hallucinate small structures and textures due to the significant information loss at limited bitrates. Thus, we introduce vector maps as semantic and structural guidance and propose a novel image compression approach named Map-Assisted Generative Compression (MAGC). MAGC employs a twostage pipeline to compress and decompress RS images at extremely low bitrates. The first stage maps an image into a latent representation, which is then further compressed in a VAE architecture to save bitrates and serves as implicit guidance in the subsequent diffusion process. The second stage conducts a conditional diffusion model to generate a visually pleasing and semantically accurate result using implicit guidance and explicit semantic guidance. Quantitative and qualitative comparisons show that our method outperforms standard codecs and other learningbased methods in terms of perceptual quality and semantic accuracy. The dataset and code will be publicly available at https://github.com/WHUyyx/MAGC.
+1. Introduction
+Satellites capture large volumes of high-resolution images of the Earth’s surface, resulting in an exponential growth of newly captured remote-sensing (RS) images every day.
+*Corresponding author
+There exists a demand for extremely low-bitrate RS image compression techniques in practical scenarios, such as efficient long-term storage and analysis in cloud-based systems with storage limitations, and faster data transfer in emergency communication networks that may be constrained. The main challenge is to develop effective compression techniques that substantially reduce the bitrate while preserving essential RS image features, enabling accurate and reliable use of compressed images in various remote sensing applications [55].
+In the past decades, the majority of image compression methods were designed upon frequency analysis, such as JPEG [50], JPEG2000 [48], BPG [6] and VTM [9]. These approaches generally employ a block-based transform coding framework and rely on hand-crafted features and heuristics to reduce redundancy in original images. At extremely low bitrates, traditional compression techniques can lead to significant loss of information. This loss can compromise the utility of the RS images for interpretation and analysis, as crucial features such as terrain, vegetation, and urban structures might be blurred or completely lost.
+Recently, learned image compression methods have shown remarkable performance compared to traditional codecs [22, 23, 32, 35, 60]. Balle ́ et al. [4] first proposed a learned image compression framework based on a variational autoencoder (VAE) architecture, as shown in Fig. 1(a). The encoder performs downsampling on the input image, yielding a compact latent representation that contains the most information about the original image. After quantization, the latent is transformed to a bitstream via entropy coding. On the decoding side, the image is reconstructed through the decoder. The entropy model is designed for distribution parameter estimation and probabilistic prediction for entropy coding to further reduce the bitrates. The learned image compression framework employs a data-driven, end-to-end training strategy, adaptively learning weights based on image contents. Consequently, the end-to-end learning approach outperforms traditional coding schemes where performance is limited by the handcrafted and fixed coding frameworks. However, these MSE
+1
+arXiv:2409.01935v1 [cs.CV] 3 Sep 2024
+
+
+Q
+EM
+Q
+EM
+Q
+EM
+D
+Q
+EM
+(a) VAE-based (b) GAN-based (c) diffusion-based (d) proposed model
+Figure 1. Operational diagrams of learned image comprssion frameworks. Q denotes quantization. EM represents the entropy model. D denotes the discriminator. E and D denote the pre-trained SD VAE encoder and decoder used to transform data between pixel space and latent space.
+optimized VAE-based models tend to produce blurred results at low bitrates, limiting their practicality in such extreme low-bitrate scenarios.
+Considering the requirement of improving the perceptual quality of reconstructed images, researchers have proposed generative image compression frameworks based on generative adversarial network (GAN) [20] and diffusion model [25], as shown in Fig. 1(b) and Fig. 1(c). GANbased methods additionally use a discriminator to distinguish real images from the images generated by the decoder [1, 2, 34, 38, 43]. Diffusion-based methods usually regard the quantized latent as a condition used for a denoising diffusion process [42, 56]. Unlike VAE-based methods that focus on the rate-distortion trade-off, these methods typically adopt a rate-distortion-perception trade-off during the training process [8], dramatically improving the visual quality of reconstructed images.
+The compression approaches mentioned above exhibit acceptable performance only at normal bitrates. However, at extremely low bitrates, i.e., less than 0.1 bits per pixel (bpp), VAE-based methods tend to produce severe blurriness [1], while GAN-based methods can introduce erroneous textures [30]. Recently, the Stable Diffusion (SD) model has been utilized as a generative prior in extremely low-bitrate image compression [10, 30, 40]. With the powerful image priors and the generative capability of the pretrained model, SD-based methods have demonstrated the characteristics of being less reliant on bitrates [10]. However, these methods achieve extremely low bitrates by using text descriptions or sketches extracted from images to be compressed, significantly removing most of the information from the original images. Thus, the compressed bitstream
+cannot provide sufficient conditions for image generation and results in noticeable compression distortion. To extract essential information as effective conditions for the denoising diffusion process, we propose a novel SD-based image compression framework as shown in Fig. 1(d). We employ ga(·) and gs(·) to further compress and decompress the latent representation z0, and the reverse diffusion process is conditioned on compressed latent representation zˆ as implicit guidance to create realistic RS images.
+Existing SD-based methods typically take full advantage of explicit conditions, such as text and sketches, which are not suitable for RS images characterized by complex and irregular ground objects. This is because the network cannot extract accurate semantic information from these conditions. For instance, when given a textual prompt like “many houses are on both sides of the road”, the diffusion model fails to understand the precise locations of the road and houses, leading to semantically incorrect reconstructions. Therefore, to minimize semantic distortion in compressed RS images at low bitrates, it is imperative to employ explicit guidance that encapsulates spatially accurate semantic information of the original RS images.
+A vector map is a graphical representation of geospatial data in which map elements such as roads and buildings are represented by geometric shapes and coordinates such as spatially positioned lines and polygons. This type of data provides semantic and structural information of ground objects and can be leveraged as semantic guidance during RS image compression and decompression. In many real-world applications, vector maps are already available or required for other purposes, such as navigation, urban planning, or geographic information systems. Utilizing these existing re
+2
+
+
+sources for image compression does not impose significant additional storage burdens. Inspired by this, we propose an extremely low-bitrate image compression approach for RS images, named Map-Assisted Generative Compression (MAGC), which utilizes semantic information from vector maps with the pre-trained SD model to reconstruct RS images at extremely low bitrates. Specifically, we conduct the denoising diffusion process using the compressed latent representations as implicit guidance and vector maps as explicit guidance. Under implicit and explicit guidance, our MAGC can generate images with higher fidelity and better maintain semantic integrity compared to other methods. We conduct the semantic segmentation task and the experimental results indicate that our method can save 90% bitrates than VTM-23.3 [9] and 60% bitrates than MS-ILLM [38] with even higher mIoU. Main contributions of this paper are as follows: 1. We propose the Map-Assisted Generative Compression (MAGC) model, which integrates semantic information from vector maps into a pre-trained SD model to generate images with plausible visual quality and accurate semantic features. 2. We develop a VAE-based latent compression module (LCM) to further compress the latent representations and provide implicit guidance for the denoising diffusion process. The semantic adapter module (SAM) is employed to extract multi-scale features from vector maps as explicit guidance to generate semantically accurate images. 3. Experimental results indicate that our method outperforms others in perceptual quality and semantic accuracy. Semantic segmentation results show that our method can save 90% bitrates than VTM-23.3 and 60% bitrates than MS-ILLM with even better performance. The rest of this paper is organized as follows. Section 2 gives a review of image compression techniques. The framework of MAGC is illustrated in Section 3. Section 4 compares the performance of the proposed MAGC with different compression methods. In Section 5, we conduct ablation studies and discuss the impact of each component. Finally, we summarize this paper in Section 6.
+2. Related Work
+In this section, we present a review of image compression from the following three subfields: learned image compression models, image compression at extremely low bitrates and RS image compression.
+2.1. Learned Image Compression Models
+Over the last few years, learned image compression has made great progress and demonstrated outstanding performance. The pioneering work of Balle ́ et al. [3] first proposed a CNN-based end-to-end learned image compression
+framework that uses stacked convolution layers and generalized divisive normalization (GDN) layers to achieve transform coding. Then they modified the framework as a VAEbased model and introduced a hyperprior as side information [4]. Furthermore, some researchers proposed to integrate a context model with hyperprior to achieve more accurate probabilistic predictions of the latent representation [22, 23, 35, 36]. In addition to the refinement of entropy models, multiple novel and efficient CNN-based transforms have been proposed [11, 23, 47]. Besides, inspired by the success of Vision Transformer in many vision tasks [15], Swin-Transformer-based methods have been explored in learned image compression [59, 60]. Liu et al. [32] proposed an efficient parallel Transformer-CNN Mixture block to improve the overall architecture of image compression models by incorporating the local modeling ability of CNN and the non-local modeling ability of transformer. Additionally researchers have explored GAN-based and diffusion-based methods to enhance the visual quality of the reconstructed images. Based on theoretical research of the rate-perception-distortion trade-off [8], many conditional GAN-based approaches [2, 34, 38] have been proposed. Mentzer et al. [34] proposed a novel generative image compression framework using a conditional GAN architecture. Agustsson et al. [2] proposed an improved decoder that navigates the distortion-realism trade-off. Muckley et al. [38] introduced an improved non-binary discriminator that is conditioned on quantized local image representations and achieve state-of-the-art perceptual quality. In contrast to these GAN-based methods, some diffusionbased methods [42, 56] also show comparable performance at normal bitrates using conditional Gaussian diffusion [25], but they show less stability at extremely low bitrates.
+2.2. Image Compression at Extremely Low Bitrates
+Under the extreme low-bitrate conditions, GAN-based compression methods [1, 26, 27, 34, 43, 46] have demonstrated superior performance compared to MSE-optimized VAEbased models and standard codecs. For instance, Sauturkar et al. [46] proposed a pioneering approach of generative compression utilizing a generative adversarial strategy and demonstrated impressive results. Mentzer et al. [34] incorporated rate-distortion-perceptual trade-off with a GANbased framework, yielding reconstructions with high realism, even at 0.1bpp on the CLIC2020 test set and 0.2bpp on Kodak dataset. Jia et al. [27] introduced a Generative Latent Coding architecture that maintains high visual quality with less than 0.04 bpp on natural images and less than 0.01 bpp on facial images. Besides, text-guided transforms have also been adopted in extremely low-bitrate image compression [28]. With powerful image priors and generative capability, the pre-trained text-to-image model, such as the SD model,
+3
+
+
+has been used in extremely low-bitrate image compression. For instance, Pan et al. [40] adopted learnable text embeddings and pre-trained diffusion model to generate realistic images. Lei et al. [30] extracted textual descriptions and sketches from the original images to guide image generation. Furthermore, Careil et al. [10] conditioned the diffusion model on more versatile end-to-end learned vectorquantized image features, maintaining the ability to reconstruct realistic images at ultra-low bitrate (e.g., less than 0.01 bpp).
+2.3. RS Image Compression
+In the last few decades, there has been a surge in the volume of RS images, necessitating the development of effective image compression techniques. In early stages, some standard codecs based on traditional transform coding, such as JPEG and JPEG2000, were extensively applied to RS image compression [17, 19, 45]. These methods performed transforms from the image domain to the frequency domain, followed by quantization, and achieved significant bitrate savings. Additionally, based on the discrete wavelet transform, the Consultative Committee for Space Data Systems (CCSDS) has also been utilized before the popularity of learning-based approaches [18, 33]. However, prior work [31] has shown that severe blurriness and artifacts are prevalent in handcrafted transform coding methods, especially at low bitrates. To address this issue, some learned image compression methods have been explored for RS image compression. Encouraged by the success of VAE-based methods in natural image compression, some researchers have proposed using these models to compress RS images [12, 13, 16, 52, 54, 55]. Chong et al. [12] incorporated the Markov Random Field into the attention mechanism and showed impressive results on standard RS datasets of varying resolutions. Wang et al. [52] used historical images as reference images for on-orbit compression based on uplink transmission procedures. Considering the reconstruction of high-frequency features such as edge information and texture characteristics, Xiang et al. [55] incorporated a dual-branch architecture based on high-frequency and lowfrequency feature components. In addition to the VAE-based methods, GAN-based methods have also been developed to generate realistic RS images. Zhao et al. [58] adopted several pairs of symmetrical encoder-decoder lattices and multiple discriminators to enhance edges, contours and textures in the reconstructed images. Han et al. [21] proposed an edge-guided adversarial network to simultaneously restore edge structures and generate texture details. Pan et al. [39] presented a coupled compression generation network that reconstructs image content and detailed textures separately and achieves outstanding results in the DOTA dataset at extremely low
+bitrates. These learning-based approaches mentioned above have shown outstanding performance in RS image compression. However, they generally focused on improving pixel-level fidelity or perceptual quality of the reconstructed images, while neglecting semantic integrity which is of paramount significance for RS images. To this end, introducing vector maps as semantic guidance in RS image compression is a promising strategy that maintains a higher degree of semantic integrity even at extremely low bitrates.
+3. Proposed Method
+3.1. Overview
+In this section, we give an overview of the proposed MAGC. As shown in Fig. 2, our MAGC consists of two stages. In the first stage, the image is mapped into a latent representation via a pre-trained SD VAE encoder. Then the latent representation is compressed, quantized, transmitted and decompressed in the LCM. The compressed latent representation, containing the majority of the information from the original image, provides implicit guidance for the conditional diffusion model and ensures that the reconstructed image contains the same contents as the original one. The process of the first stage can be formulated as follows:
+z0 = E(x), (1)
+zˆ = LCM(z0, m) (2)
+where E(·) denotes the pre-trained SD VAE encoder. x denotes the input image. z0 and zˆ are the original and compressed latent representation. m represents the vector map. In the second stage, we utilize the SAM to produce multi-scale features as explicit guidance, which provides additional semantic and structural information and assists in generating images with semantic accuracy. Under implicit guidance from the compressed latent representation and explicit guidance from the vector map, the conditional diffusion model is conducted in the latent space, followed by the generation of the realistic and semantically accurate reconstruction through a pre-trained SD VAE decoder. The process can be formulated as follows:
+fms = SAM(SE(m), zt), (3)
+z ̃0 = CDM(zˆ, fms), (4)
+xˆ = D(z ̃0), (5)
+where SE denotes the semantic encoder. fms is the produced multi-scale features. zt and z ̃0 are the noised and denoised latent representation. CDM denotes the conditional diffusion model. D(·) denotes the pre-trained SD VAE decoder. xˆ is the reconstructed image.
+4
+
+
+......
+Vector map
+...
+Denoising U-Net
+LCM
+SAM
+...
+Frozen
+Trainable
+Fine-tuned
+Stage1 Stage2
+Q
+101001010...
+Analysis transforms
+Synthesis transforms
+Semantic encoder
+implicit guidance
+explicit guidance
+Figure 2. The two-stage pipeline of the proposed MAGC. In the first stage, the latent compression module (LCM) is designed to compress the latent representation and provide implicit guidance for the conditional diffusion model. In the second stage, the semantic adapter module (SAM) is utilized to produce multi-scale features, serving as explicit guidance for the conditional diffusion process.
+3.2. Latent Compression Module
+The LCM is designed to further reduce the redundancy of the latent representation and provide implicit guidance for the denoising diffusion process. The network architecture of LCM is illustrated in Fig. 3. Similar to the VAE-based learned image compression frameworks, the LCM consists of latent transform networks, hyperprior networks and a channel-wise context model. Furthermore, the spatiallyadaptive denormalization (SPADE) ResBlock [41] is designed to integrate the semantic information from vector maps into the latent transform coding. The details of the LCM are presented below.
+3.2.1 VAE-based Latent Coding
+Since Balle ́ et al. [3, 4] proposed the VAE-based image compression framework, most of the learned image compression methods have followed the paradigm. Inspired by this, we model the latent compression process using VAEbased networks. The generalized latent compression framework is formulated as follows:
+y = ga(z, m; φ),
+yˆ = Q(y),
+zˆ = gs(yˆ, m; θ),
+(6)
+where y denotes the compact representation obtained from z. yˆ denotes the quantized counterpart of y. ga(·) and gs(·) are analysis and synthesis transforms. φ and θ are learnable parameters of the transform networks. Q represents the quantization operation. As shown in Fig. 3, ga(·) consists of several residual blocks and downsampling convolution layers, performing
+the transform from the input z to the compact representation y in the encoding process. Symmetrical to this, gs(·) employs the pixelshuffle operation to perform upsampling and maps yˆ back to zˆ. In contrast to previous methods that inject uniform noise during training to simulate the quantization error, we employ the straight-through estimator (STE) [38, 49] to pass the quantized to the decoder with backpropagation, ensuring that the decoder sees the same data distribution during training and inference. Following the previous work [36], We model each element of yˆ as a single Gaussian distribution, and the standard deviations σ and means μ are estimated by the entropy model. To achieve a more precise distribution estimation, the hyperprior networks [4] and the channel-wise autoregressive context model [35] are introduced in our entropy model. As shown in the right part of Fig. 3, the hyper encoder ha(·) encodes y into the side information h. Then yˆ is divided into K slices (y1, y2, ..., yK ) alone the channel dimension, and these slices are encoded and decoded in an autoregressive manner. Specifically, estimating the distribution of the current slice yi is conditioned on both the hyperprior and the previously decoded symbols y<i. The entire entropy model is formulated as follows:
+h = ha(y; φh),
+ˆh = Q(h),
+gc = hs(ˆh; θh),
+μi, σi = gcm(gc, y<i; θcm), 1 ≤ i ≤ K,
+pyˆ(yˆi|ctx) = [N (μi, (σi)2) ∗ U(− 1
+2, 1
+2 )](yˆi)
+with ctx = (ˆh, y<i, θh, θcm),
+(7)
+5
+
+
+Conv k3s1, N
+SPADE ResBlock
+Conv k3s2, N
+SPADE ResBlock
+Conv k3s2, N
+SPADE ResBlock
+Conv k3s1, M
+Conv k3s1, 4
+SPADE ResBlock
+Pixel Shuffle
+Pixel Shuffle
+SPADE ResBlock
+Conv k3s1, N
+Conv k3s1, N
+Conv k3s2, N
+Conv k3s1, M
+Conv k3s1, 2M
+Pixel Shuffle
+ResBlock 2
+ResBlock 2
+ResBlock 2
+ResBlock 2
+ResBlock 2
+ResBlock 2
+ResBlock
+ResBlock
+ResBlock
+ResBlock
+Conv k3s1, N
+Q
+Channle-wise context model
+AE
+AD
+Q
+AE
+AD
+Conv k5s1
+Conv k3s2
+Conv k3s2
+Conv k3s2
+Basic Block
+Basic Block
+SPADE ResBlock
+Figure 3. The network architecture of the proposed LCM, consists of the latent transform networks, hyperprior networks and a channel-wise context model. Q represents quantization. AE, AD represent arithmetic encoder and arithmetic decoder. ↓ and ↑ indicate downsampling and upsampling. We set N = 128 and M = 64 in our experiments.
+where ha(·), hs(·), φh and θh are hyper analysis and synthesis transform and their learnable parameters. h and ˆh are the side information and its quantized counterpart. gc represents the global context, which is the output of hs(·). gcm(·) and θcm are the channel-wise context model and its learnable parameters.
+3.2.2 Semantic-Guided Transform
+As shown in Fig. 3, we utilize the SPADE ResBlock to integrate the semantic information into the latent transform coding at each scale. The structures of the SPADE ResBlock, SPADE block and basic block are illustrated in Fig. 4. In the SPADE block, we merge the semantic feature map and latent feature map by concatenation as the input of the first basic block. Then the merged feature map is convolved to produce the scale factor γ and bias term β, which are multiplied and added to the normalized input element-wise. The whole process can be formulated as follows:
+fbn = BatchNorm(fin),
+γ = Convγ(BasicBlk([fbn, fsem])),
+β = Convβ(BasicBlk([fbn, fsem])),
+fout = γ ⊗ fbn + β,
+(8)
+where fin, fbn, fsem and fout are the input feature map, normalized feature map, semantic feature map and output of SPADE block. BasicBlk denotes the basic block. γ and β are the produced scale factor and bias. Convγ and Convβ are the convolution layers used to predict γ and β. ⊗ represents Hadamard product. With the help of the SPADE block, the global structural information is incorporated into
+the latent transform coding. In that case, the compressed latent representation is considered to be allocated a lower bitrate for storing coarse content while retaining the essential global structure.
+SPADE Block
+BatchNorm
+Basic Block
+Conv Conv
+ResBlock
+Basic Block
+Basic Block
+SPADE ResBlock
+SPADE Block
+Basic Block
+SPADE Block
+Basic Block
+Basic Block
+Conv
+LayerNorm
+LeakyRelu
+Figure 4. Structures of ResBlock, SPADE ResBlock, SPADE block and basic block in our work.
+3.3. Conditional Diffusion Model
+As shown in Fig. 2, we utilize the pre-trained SD model to generate images with multiple guidance. In this section, we will introduce how SD works and how to use multiple guidance to generate realistic and semantically accurate reconstructions at extremely low bitrates.
+6
+
+
+3.3.1 Stable Diffusion
+The classical Denoising Diffusion Probabilistic Model (DDPM) performs adding and removing noise in pixel space [25], which is time-consuming for both training and inference. In contrast, the SD model conducts the diffusion process in the latent space with a much smaller spatial resolution [44]. Generally, it consists of a pre-trained VAE and a corresponding U-Net denoiser. Firstly, the VAE is trained to convert images into latent space and then reconstruct them, which is formulated as follows:
+z0 = E(x),
+xˆ = D(z0), (9)
+where x and xˆ are the input and reconstructed image. z0 denotes the latent representation. For the latent forward diffusion process, z0 is progressively corrupted by adding Gaussian noise through a Markov chain, which can be described as:
+zt = √α ̄tz0 + √1 − α ̄tε, ε ∼ N (0, I), (10)
+where zt is the noised latent representation at step t. α ̄t is a pre-set hyperparameter controlling the intensity of the added noise. Then a denoiser function, εθ, is trained to estimate the noise injected to zt. The optimization process can be formulated as follows:
+L = Ez0,ε,t ∥ε − εθ(zt, t)∥2 , (11)
+where t is the timestep sampled from [0, T ]. During inference, the input noised latent zT is randomly sampled from a standard Gaussian distribution. After T iterations of the backward diffusion processes, the denoised latent is mapped back to pixel space by the pre-trained SD VAE decoder D(·).
+3.3.2 Denoising with Multiple Guidance
+In our work, the denoising diffusion process is conditioned on both implicit and explicit guidance. Specifically, zˆ, the output of LCM, contains most of the details from the original images, serving as the implicit guidance, while the vector maps provide additional semantic and structural information as explicit guidance. For implicit guidance, we concatenate zˆ with zt as the input of the denoising U-Net at each time step. To adapt the modified dimension, we extend the first convolutional layer by increasing the number of channels that corresponds to the channel dimension of zˆ, i.e. from 4 to 8. The additional channels are initialized to zero during training. Since zˆ contains the compressed information from z0, the final output of the denoising process is controlled toward the original latent representation with implicit guidance.
+For explicit guidance, we use a semantic encoder to transform the vector map into a semantic feature map, which is then transformed into multi-scale conditional features fms in SAM. The network architectures of the semantic encoder and SAM are shown in Fig. 5. Similar to previous work [37], the vector map is first downsampled to match the dimension of the noised latent zt, and then concatenated with zt as input to the first residual block, yielding the feature f 1
+ms. In each subsequent scale, a convolutional layer and two residual blocks are employed to extract corresponding feature f i
+ms. Note that the produced multi-scale features
+fms = {f 1
+ms, f 2
+ms, f 3
+ms, f 4
+ms} have the same dimension with
+the intermediate features fenc = {f 1
+enc, f 2
+enc, f 3
+enc, f 4
+enc} in the encoder side of the U-Net denoiser. These conditional features fms are then added with fenc at each scale. By integrating the explicit guidance with the denoising diffusion process, the reconstructions are considered to be semantically consistent with the original images even at extremely low bitrates.
+Conv k5s2
+GELU
+Conv k3s2
+GELU
+Conv k3s2
+ResBlock
+Conv k3s2
+ResBlock 2
+Conv k3s2
+ResBlock 2
+...
+SAM
+Semantic encoder
+Figure 5. Network architecture of semantic encoder and semantic adapter module (SAM).
+3.4. Training Strategy
+The overall optimization objectives consist of three tradeoff terms: rate loss Lrate, latent distortion loss Lld and diffusion loss Ldiff. The loss function can be formulated as:
+L = λrateLrate + λldLld + λdiffLdiff, (12)
+where λrate, λld and λdiff are the corresponding weights. However, we have found that the joint optimization described in (12) leads to instability of training and difficulty in convergence. In contrast, we propose a two-stage training strategy for the optimization of the latent compression module and conditional diffusion model respectively. In the first stage, we introduce the rate-distortion tradeoff to optimize the LCM, which is described as:
+L1st = Lrate + λLld,
+Lrate = Ez0∼pz [−log2 pyˆ(yˆ)] + Ez0∼pz [−log2 pˆh(ˆh)],
+Lld = ∥zˆ − z0∥2 , (13)
+where λ is the Lagrange multiplier that controls the expected trade-off between rate and latent distortion. pz is
+7
+
+
+the distribution of latent representations obtained from input source images. pyˆ and pˆh are the probability distribution
+of yˆ and ˆh for the entropy coding. In the second stage, we finetune the decoding transform gs(·) and hs(·) of LCM to condition the denoising diffusion process adaptively. Since the SD model is pre-trained on natural images, we finetune the linear layers on our training set to improve the compression performance. The trainable parameters are illustrated in Fig. 2 and the loss function is formulated as follows:
+L2nd = Ez0,c,ε,t ∥ε − εθ(zt, c, t)∥2
+with c = (zˆ, fms), (14)
+where c presents the conditional control that contains implicit and explicit guidance.
+4. Experiments
+4.1. Experimental Settings
+4.1.1 Datasets
+In this paper, we collect paired RS images and vector maps from different regions as training and testing datasets. All RS images are sourced from the World Imagery, while all vector maps are acquired from the Open Street Map. The training set comprises 45,000 image pairs, while the test set contains 4,500 image pairs. The resolution of each image is 256 × 256, and the spatial resolution is 1.07 m/pixel. The dataset will be publicly available to the community to facilitate the advancements on RS image compression.
+4.1.2 Baseline Methods
+To demonstrate the effectiveness of the proposed method, we compare it with standard codecs and state-of-the-art learning-based methods, including BPG [6], VTM-23.3 [9], HiFiC [34], MS-ILLM [38], STF [60], ELIC [23] and HLRSCompNet [55]. Among them, BPG1 and VTM-23.32 are image compression standards. HiFiC3 and MS-ILLM4 are classic and improved GAN-based approaches. STF5 and ELIC6 are MSE-optimized VAE-based frameworks. HLRSCompNet7 is the state-of-the-art learning-based method for RS image compression. All the learning-based baseline
+1https://bellard.org/bpg/ 2https : / / vcgit . hhi . fraunhofer . de / jvet / VVCSoftware_VTM 3https://github.com/Justin- Tan/high- fidelitygenerative-compression 4https : / / github . com / facebookresearch / NeuralCompression/tree/main/projects/illm 5https://github.com/Googolxx/STF 6https : / / github . com / VincentChandelier / ELiC ReImplemetation 7https://github.com/shao15xiang/HL-RSCompNet
+methods are retrained and tested on the same dataset for fair comparisons.
+4.1.3 Implementation Details
+Our MAGC is built based on the CompressAI8 [5] and the Stable Diffusion 2.1-base9 model [44]. We implement the whole model using the PyTorch framework and all experiments are conducted on three NVIDIA GeForce RTX 3090 GPUs. We train the MAGC in two-stages, we first optimize the LCM with a batch size of 16 for 250K iterations. We set λ = {0.10, 0.20, 0.39, 0.67, 0.91, 1.25} to control the compression ratio. Secondly, we optimize the decoder of LCM, semantic encoder, SAM and the linear layers of denoising Unet, which is around 15% of all weights. We adopt a grid of 1,000 timesteps to finetune the diffusion model. The batch size is set to 48 and the entire network converges after another 150K iterations. For both training stages, the AdamW optimizer is adopted with a learning rate of 5 × 10−5, and a linear warmup is applied for the first 10k training iterations. At inference time, we employed DDPM sampling with 50 denoising steps to create images.
+4.1.4 Evaluation Metrics
+To evaluate compression performance, both full-reference and no-reference image quality assessment (IQA) metrics are adopted. For full-reference metrics, learned perceptual image patch similarity (LPIPS) [57] and deep image structure and texture similarity (DISTS) [14] are developed that focus on preservation of texture and human perception. For no-reference metrics, we utilize multi-scale image quality transformer (MUSIQ) [29] to capture image quality at different granularities and employ fre ́chet inception distance (FID) [24] to measure the statistical fidelity of the reconstructed images. Besides, we comprehensively compare codecs with different bitrates using Bjontegaard (BD) metrics [7]: BD-LPIPS, BD-DISTS and BD-FID, which can be regarded as the average improvement between codecs under the same bitrate. We also report BD-PSNR and BD-SSIM, although these distortion metrics are less meaningful on extremely low-bitrate image compression problems [10, 30]. Unlike other metrics calculated from a pair of images or a single image, FID assesses the similarity between the distributions of original and reconstructed images. To more accurately describe the similarity, we follow [34] and extract patches to calculate FID. For each H × W image, we first extract ⌊H/f ⌋ · ⌊W/f ⌋ non-overlapping f × f patches.
+8https://github.com/InterDigitalInc/CompressAI/ tree/master/compressai 9https : / / github . com / Stability - AI / stablediffusion
+8
+
+
+Then we shift the extraction windows by f /2 in both dimensions to get another (⌊H/f ⌋ − 1) · (⌊W/f ⌋ − 1) patches. In our experiments, f is set to 128, and we can get 22,500 patches on the test set for subsequent calculations.
+4.2. Comparison with State-of-the-Art Methods
+4.2.1 Quantitative Comparisons
+Rate-perception curves produced by our MAGC and baseline methods are shown in Fig. 6. It is obvious that our MAGC outperforms baseline methods in terms of perceptual quality at extremely low bitrates in terms of various perception metrics. For LPIPS, our method is comparable with GAN-based HiFiC and MS-ILLM, which are optimized based on LPIPS loss. For DISTS, MUSIQ and FID, our method outperforms all baseline methods, indicating that our method has the best potential to enhance human perceptual quality which is conducive to visual interpretation. The comparison results of BD-metrics (Anchor: VTM23.3) are shown in Table 1. We calculate the quality improvement compared to the anchor over a certain bitrate range and the best results are highlighted in bold. As shown in Table 1, our MAGC outperforms all baseline methods in terms of BD-LPIPS, BD-DISTS and BD-FID. These results further demonstrate that the pre-trained SD model can be used to generate perceptually pleasing and high-realism images with implicit and explicit guidance, even at extremely low bitrates. We also note that distortion metrics like BD-PSNR and BD-SSIM are not favorable to our method. This is because the compressed images are generated using pre-trained diffusion model as image prior, not considering pixel-level distortion during optimization [10, 30]. Other generative compression approaches like HiFiC and MS-ILLM optimized by rate-distortion-perceptual trade-off show better pixel-level fidelity than our MAGC, but the images generated by them are inferior to our method in terms of perceptual quality, which should be paid more attention in such extreme scenarios.
+4.2.2 Qualitative Comparisons
+To demonstrate the effectiveness of the proposed method on visual perception, we select three examples characterized by different ground objects and visualize the output images of various methods in Fig. 7. It is easy to observe that the standard codecs BPG and VTM are more likely to produce severe artifacts at low bitrates. The reconstructed images of STF, ELIC and HL-RSCompNet can better preserve the structure information from the original images due to the VAE-based architectures and MSE loss function, but they still suffer from blurriness. GAN-based HiFiC and MSILLM pay more attention to human judgment using the ratedistortion-perception trade-off to produce sharper edges and
+Table 1. BD-metrics calculated by different methods on the test set. VTM-23.3 is the anchor.
+Methods BD-LPIPS↓ BD-DISTS↓ BD-FID↓ BD-PSNR↑ BD-SSIM↑
+Standard codecs
+VTM-23.3 0.0000 0.0000 0.0000 0.0000 0.0000
+BPG 0.0172 -0.0013 -11.965 -0.2351 -0.0101
+MSE Baselines
+STF -0.0628 -0.0249 -28.861 0.5599 0.0289
+ELIC -0.0429 -0.0100 -19.523 0.3701 0.0158
+HL-RSCompNet -0.1424 -0.0574 -39.661 1.0293 0.0587
+Generative Compression Methods
+HiFiC -0.3394 -0.1152 -133.56 -2.0506 -0.0505
+MS-ILLM -0.3513 -0.1302 -133.05 -1.7533 -0.0432
+MAGC (ours) -0.3521 -0.1464 -166.06 -2.9213 -0.1165
+more texture features. However, some complex textures, like the shape of the houses and roads, are difficult to reconstruct accurately. In contrast to these methods, we utilize vector maps to provide semantic and structural information so that our MAGC can generate realistic and semantically accurate reconstructions at extremely low bitrates.
+4.3. Effect on Semantic Segmentation
+In addition to objective fidelity and visual quality, another requirement of RS image compression lies in maintaining their performance on relevant downstream vision tasks, such as object detection, scene recognition, semantic segmentation and others. To this end, we additionally evaluate the proposed MAGC and baseline methods on the semantic segmentation task and demonstrate the superior practicality of our method. Note that the ground truth of semantic segmentation is unavailable, we leverage the relative performance toward the results of original images to assess the reconstructions of different approaches. In our experiments, the RS foundation model RVSA [51] finetuned on the LoveDA dataset [53] is used to segment the images. Some examples of the compressed images and corresponding semantic segmentation results are shown in Fig. 8. The visual results show that images produced by our method are semantically closer to the original images than other methods at similar bitrates. For RS images with irregular ground objects, different objects reconstructed by other methods tend to blend together, making it difficult for segmentation. In contrast, with the help of vector maps, our method can accurately distinguish the edges and generate clear textures, resulting in better segmentation outcomes. For instance, the houses and roads generated by our method are more accurate in terms of locations and shapes. We also employ the mean intersection over union (mIoU) to measure the semantic similarity between reconstructed
+9
+
+
+Figure 6. Quantitative comparisons with state-of-the-art approaches across various perception metrics (LPIPS↓/ DISTS↓/ MUSIQ↑/ FID↓) on the test set.
+and original images quantitatively. As shown in Fig. 9, our MAGC outperforms all baseline methods in terms of mIoU by integrating semantic guidance from vector maps with pre-trained SD model. By analyzing the quantitative results across various bitrates, we find that our MAGC achieves a relatively high mIoU (>0.4) at a bitrate less than 0.02, saving 90% rate than VTM-23.3 and 60% rate than MS-ILLM with even better performance.
+5. Ablation Studies and Discussions
+To better analyze and understand the proposed method, we conduct ablation studies on each component in this section.
+Table 2. Ablation study on the pre-trained Stable Diffusion model.
+Methods PSNR↑ LPIPS↓ DISTS↓ FID↓ mIoU↑
+Pre-trained SD VAE 26.005 0.1369 0.0964 11.210 0.7566
+MAGC (w/o CDM) 22.334 0.5867 0.3605 127.71 0.2798
+MAGC (0.037 bpp) 21.763 0.3253 0.2061 25.029 0.5482
+5.1. Impact of Pre-Trained Stable Diffusion Model
+We first evaluate the impact of the pre-trained SD model, which consists of a VAE and a latent diffusion model. To explore the information lost in the transforms between pixel
+space and latent space, we only employ the pre-trained SD VAE to compress and reconstruct images. The results on various metrics are shown in Table 2, which can be regarded as the upper bound of the performance of SD-based methods.
+To further demonstrate the powerful image priors and generative capability of the pre-trained diffusion model, we perform the proposed LCM alone, bypassing the conditional diffusion model as a prior and using the compressed latent representation as the input of the pre-trained SD VAE decoder. As shown in “MAGC w/o CDM” of Table 2, the reconstructed images show significantly lower perceptual quality due to the absence of the pre-trained diffusion model. The reason lies in the fact that VAE-based LCM can only retain vague outlines at extremely low bitrates, while clear texture structures are generated by the pre-trained diffusion model. We show visual examples of this configuration in Fig. 10.
+5.2. Impact of Semantic Guidance
+We inject semantic information from vector maps in both stages by designing the SPADE block and SAM. To explore the contribution of vector maps, we remove these modules and test the compression performance. In addition, we also consider the scenarios where vector maps are only used on
+10
+
+
+Original (bpp / DISTS) BPG (0.091 / 0.331) VTM (0.094 / 0.339) STF (0.080 / 0.320) ELIC (0.085 / 0.345)
+Vector map HL-RSCompNet (0.091 / 0.251) HiFiC (0.070 / 0.157) MS-ILLM (0.069 / 0.168) MAGC (0.065 / 0.170)
+Original (bpp / DISTS) BPG (0.132 / 0.266) VTM (0.137 / 0.268) STF (0.110 / 0.262) ELIC (0.125 / 0.255)
+Vector map HL-RSCompNet (0.126 / 0.248) HiFiC (0.127 / 0.226) MS-ILLM (0.114 / 0.197) MAGC (0.100 / 0.158)
+Original (bpp / DISTS) BPG (0.105 / 0.310) VTM (0.112 / 0.310) STF (0.073 / 0.276) ELIC (0.073 / 0.284)
+Vector map HL-RSCompNet (0.067 / 0.290) HiFiC (0.075 / 0.225) MS-ILLM (0.091 / 0.194) MAGC (0.070 / 0.175)
+Figure 7. Qualitative examples produced by various methods. These three examples are characterized by houses, roads, and rivers respectively. We employ compressed images with the closest bitrates for fair comparison.
+the decoding side, i.e., we eliminate SPADE blocks and retain SAM to provide explicit guidance for denoising dif
+fusion process. The metrics evaluated by different configurations are shown in Fig. 12. In general, removing vec
+11
+
+
+BPG VTM STF ELIC HL-RSCompNet HiFiC MS-ILLM MAGC(ours) Original 0.0376 / 0.1862 0.0370 / 0.1999 0.0366 / 0.2897 0.0402 / 0.2741 0.0393 / 0.3502 0.0410 / 0.3978 0.0349 / 0.4169 0.0365 / 0.5482 bpp / mIoU
+building road forest barren water agriculture background
+Figure 8. Visual comparison of compressed images and corresponding semantic segmentation results from various methods. Values at the very bottom are the averages measured on the test set.
+tor maps results in much worse perceptual quality and segmentation results at relatively low bitrates, while the results using vector maps only on the decoding side are slightly inferior to the full MAGC. On the other hand, these three configurations achieve similar compression performance at higher bitrates. We also report BD-metrics of these configurations in Table 3, indicating that our MAGC makes full
+use of vector maps to produce perceptually pleasing and semantically accurate images. We present visual comparisons in Fig. 11. We notice that MAGC (w/o map) struggles to distinguish complex ground objects in such extreme scenarios, leading to erroneous reconstructions such as houses and roads. With the help of vector maps in image generation, MAGC (w/o SPADE block) can generate clear edges
+12
+
+
+Figure 9. Quantitative comparisons of mIoU calculated by various methods.
+Original MAGC (w/o CDM) MAGC (0.037 bbp)
+Figure 10. Visual examples of the ablation study on the conditional diffusion model.
+of ground objects, but the shapes of houses are still inaccurate.
+Table 3. Ablation study on the introduction of vector maps with various methods.
+Methods BD-PSNR↑ BD-LPIPS↓ BD-DISTS↓ BD-mIoU↑
+MAGC(w/o map) -3.0385 -0.3452 -0.1430 0.3349
+MAGC(w/o SPADE block) -3.0152 -0.3429 -0.1403 0.3353
+MAGC -2.9213 -0.3521 -0.1464 0.3567
+HiFiC -2.0506 -0.3394 -0.1152 0.2200
+HiFiC + map -2.1373 -0.3443 -0.1256 0.2503
+ELIC 0.3701 -0.0429 -0.0100 0.0646
+ELIC + map 0.3524 -0.0479 -0.0128 0.0788
+To explore the possibility of introducing vector maps in other methods, we choose the classical GAN-based HiFiC and VAE-based ELIC and inject semantic information from
+Original MAGC (w/o map) MAGC (w/o SPADE block) MAGC Vector map bpp / DISTS / mIoU 0.0252 / 0.2271 / 0.4617 0.0252 / 0.2233 / 0.4939 0.0220 / 0.2257 / 0.5003
+Figure 11. Visual examples of the ablation study on the semantic guidance in both stages. Values at the very bottom are the averages measured on the test set.
+vector maps into them. Similar to the design of SAM, we utilize an adapter to produce multi-scale features which are then added to the feature maps at each scale on the decoding side. To compare the compression performance at the same bitrates, we fix the encoder and entropy model, only optimizing the decoder and adapter jointly. BD-metrics of these methods are shown in Table 3. For both HiFiC and ELIC, integrating vector maps as semantic guidance results in lower PSNR scores, while perceptual metrics like LPIPS, DISTS and mIoU show varying degrees of improvement. Since perceptual quality is paid more attention at extremely low bitrates, we speculate that the introduction of vector maps should enhance the compression performance across various methods in RS image compression by designing more complex and reasonable modules.
+5.3. Impact of Denoising Steps
+PSNR, LPIPS, DISTS and FID results depending on the number of denoising steps are shown in Fig. 13. We find that the metrics are comparatively constant across different denoising steps for higher bitrates, indicating that the diffusion model can reconstruct images with superior perceptual quality using a few denoising steps in these scenarios. Besides, we note that there is a trade-off between perception and distortion by changing the timesteps. Specifically, with the increase of denoising steps, our method can achieve better LPIPS, DISTS and FID scores, but pixel-level fidelity is worse in terms of PSNR.
+13
+
+
+Figure 12. Ablation study on the introduction of vector maps, which serve as semantic guidance in both stages of our MAGC.
+Figure 13. Perception and distortion metrics depending on the number of denoising steps. In all cases these models are trained using a grid of 1,000 timesteps.
+6. Conclusion
+In this paper, we propose a novel SD-based image compression framework, employing a pre-trained diffusion model with powerful image priors and generative capability to reconstruct realistic RS images at extremely low bitrates. To produce semantically accurate reconstructions, we introduce vector maps as semantic guidance and present an improved image compression approach named MapAssisted Generative Compression (MAGC). The image is first mapped into a latent representation via the pre-trained SD VAE encoder, and the latent representation is further compressed in LCM, serving as implicit guidance for the denoising diffusion process. The SAM is designed to extract multi-scale features from vector maps, providing explicit guidance for image generation. Quantitative and qualitative comparison results show that images produced by our method have the best perceptual quality compared to standard codecs and other learning-based methods. Besides, the proposed MAGC achieves the highest mIoU scores on the semantic segmentation task, demonstrating the superior practicality of our method.
+In the future study, we will continue to explore generative compression methods on RS images. Based on the proposed method, we would like to find a strategy to achieve the balance between pixel-level fidelity and perceptual quality, and the denoising steps should also be considered to en
+hance efficiency in practical scenarios.
+References
+[1] Eirikur Agustsson, Michael Tschannen, Fabian Mentzer, Radu Timofte, and Luc Van Gool. Generative adversarial networks for extreme learned image compression. In Proc. IEEE/CVF Int. Conf. Comput. Vis., pages 221–231, 2019. 2, 3
+[2] Eirikur Agustsson, David Minnen, George Toderici, and Fabian Mentzer. Multi-realism image compression with a conditional generator. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit., pages 22324–22333, 2023. 2, 3 [3] Johannes Balle ́, Valero Laparra, and Eero P Simoncelli. Endto-end optimized image compression. In Proc. Int. Conf. Learn. Representat., pages 1–27, 2017. 3, 5
+[4] Johannes Balle ́, David Minnen, Saurabh Singh, Sung Jin Hwang, and Nick Johnston. Variational image compression with a scale hyperprior. In Proc. Int. Conf. Learn. Representat., pages 1–23, 2018. 1, 3, 5 [5] Jean Be ́gaint, Fabien Racap ́e, Simon Feltman, and Akshay Pushparaja. Compressai: a pytorch library and evaluation platform for end-to-end compression research. arXiv:2011.03029, 2020. 8
+[6] F. Bellard. BPG image format, 2017. 1, 8 [7] Gisle Bjontegaard. Calculation of average psnr differences between rd-curves. VCEG-M33, 2001. 8 [8] Yochai Blau and Tomer Michaeli. Rethinking lossy compression: The rate-distortion-perception tradeoff. In Proc. Int. Conf. Mach. Learn., pages 675–685, 2019. 2, 3
+14
+
+
+[9] Benjamin Bross, Ye-Kui Wang, Yan Ye, Shan Liu, Jianle Chen, Gary J. Sullivan, and Jens-Rainer Ohm. Overview of the versatile video coding (vvc) standard and its applications. IEEE Trans. Circuit Syst. Video Technol., 31(10):3736–3764, 2021. 1, 3, 8 [10] Marlene Careil, Matthew J Muckley, Jakob Verbeek, and Ste ́phane Lathuili`ere. Towards image compression with perfect realism at ultra-low bitrates. In Proc. Int. Conf. Learn. Representat., pages 1–21, 2023. 2, 4, 8, 9 [11] Zhengxue Cheng, Heming Sun, Masaru Takeuchi, and Jiro Katto. Learned image compression with discretized gaussian mixture likelihoods and attention modules. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit., pages 7939–7948, 2020. 3 [12] Yanwen Chong, Liang Zhai, and Shaoming Pan. High-order markov random field as attention network for high-resolution remote-sensing image compression. IEEE Trans. Geosci. Remote Sens., 60:1–14, 2022. Art. no. 5401714. 4 [13] Vinicius Alves de Oliveira, Marie Chabert, Thomas Oberlin, Charly Poulliat, Mickael Bruno, Christophe Latry, Mikael Carlavan, Simon Henrot, Frederic Falzon, and Roberto Camarero. Satellite image compression and denoising with neural networks. IEEE Geosci. Remote Sens. Lett., 19:1–5, 2022. 4 [14] Keyan Ding, Kede Ma, Shiqi Wang, and Eero P. Simoncelli. Image quality assessment: Unifying structure and texture similarity. IEEE Trans. Pattern Anal. Mach. Intell., 44(5): 2567–2581, 2022. 8 [15] Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Sylvain Gelly, Jakob Uszkoreit, and Neil Houlsby. An image is worth 16x16 words: Transformers for image recognition at scale. In Proc. Int. Conf. Learn. Representat., pages 1–21, 2021. 3 [16] Chuan Fu and Bo Du. Remote sensing image compression based on the multiple prior information. Remote Sens., 15 (8):2211, 2023. 4 [17] Yiming Gao and Xiaoping Yang. A cartoon-texture approach for jpeg/jpeg 2000 decompression based on tgv and shearlet transform. IEEE Trans. Image Process., 28(3):1356–1365, 2018. 4 [18] Fernando Garcia-Vilchez and Joan Serra-Sagrista. Extending the ccsds recommendation for image data compression for remote sensing scenarios. IEEE Trans. Geosci. Remote Sens., 47(10):3431–3445, 2009. 4 [19] Jorge Gonz ́alez-Conejero, Joan Bartrina-Rapesta, and Joan Serra-Sagrista. Jpeg2000 encoding of remote sensing multispectral images with no-data regions. IEEE Geosci. Remote Sens. Lett., 7(2):251–255, 2009. 4 [20] Ian J. Goodfellow, Jean Pouget-Abadie, Mehdi Mirza, Bing Xu, David Warde-Farley, Sherjil Ozair, Aaron Courville, and Yoshua Bengio. Generative adversarial nets. In Proc. Adv. Neural Inform. Process. Syst., page 2672–2680, 2014. 2
+[21] Pengfei Han, Bin Zhao, and Xuelong Li. Edge-guided remote-sensing image compression. IEEE Trans. Geosci. Remote Sens., 61, 2023. Art. no. 5524515. 4
+[22] Dailan He, Yaoyan Zheng, Baocheng Sun, Yan Wang, and Hongwei Qin. Checkerboard context model for efficient learned image compression. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit., pages 14771–14780, 2021. 1, 3 [23] Dailan He, Ziming Yang, Weikun Peng, Rui Ma, Hongwei Qin, and Yan Wang. Elic: Efficient learned image compression with unevenly grouped space-channel contextual adaptive coding. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit., pages 5718–5727, 2022. 1, 3, 8 [24] Martin Heusel, Hubert Ramsauer, Thomas Unterthiner, Bernhard Nessler, and Sepp Hochreiter. Gans trained by a two time-scale update rule converge to a local nash equilibrium. In Proc. Adv. Neural Inform. Process. Syst., pages 112, 2017. 8 [25] Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. In Proc. Adv. Neural Inform. Process. Syst., pages 6840–6851, 2020. 2, 3, 7 [26] Shoma Iwai, Tomo Miyazaki, Yoshihiro Sugaya, and Shinichiro Omachi. Fidelity-controllable extreme image compression with generative adversarial networks. In Proc. Int. Conf. Pattern Recognit., pages 8235–8242, 2021. 3
+[27] Zhaoyang Jia, Jiahao Li, Bin Li, Houqiang Li, and Yan Lu. Generative latent coding for ultra-low bitrate image compression. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit., pages 26088–26098, 2024. 3 [28] Xuhao Jiang, Weimin Tan, Tian Tan, Bo Yan, and Liquan Shen. Multi-modality deep network for extreme learned image compression. In Proc. AAAI Conf. Artif. Intell., pages 1033–1041, 2023. 3 [29] Junjie Ke, Qifei Wang, Yilin Wang, Peyman Milanfar, and Feng Yang. Musiq: Multi-scale image quality transformer. In Proc. IEEE/CVF Int. Conf. Comput. Vis., pages 5148–5157, 2021. 8 [30] Eric Lei, Yig ̆it Berkay Uslu, Hamed Hassani, and Shirin Saeedi Bidokhti. Text + sketch: Image compression at ultra low rates. In Proc. Int. Conf. Mach. Learn. Workshop, 2023. 2, 4, 8, 9 [31] Mu Li, Kede Ma, Jane You, David Zhang, and Wangmeng Zuo. Efficient and effective context-based convolutional entropy modeling for image compression. IEEE Trans. Image Process., 29:5900–5911, 2020. 4 [32] Jinming Liu, Heming Sun, and Jiro Katto. Learned image compression with mixed transformer-cnn architectures. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit., pages 14388–14397, 2023. 1, 3 [33] Elias Machairas and Nektarios Kranitis. A 13.3 gbps 9/7m discrete wavelet transform for ccsds 122.0-b-1 image data compression on a space-grade sram fpga. Electronics, 9(8): 1234, 2020. 4 [34] Fabian Mentzer, George D Toderici, Michael Tschannen, and Eirikur Agustsson. High-fidelity generative image compression. In Proc. Adv. Neural Inform. Process. Syst., pages 11913–11924, 2020. 2, 3, 8 [35] David Minnen and Saurabh Singh. Channel-wise autoregressive entropy models for learned image compression. In Proc. IEEE Int. Conf. Image Process., pages 3339–3343, 2020. 1, 3, 5
+15
+
+
+[36] David Minnen, Johannes Ball ́e, and George D Toderici. Joint autoregressive and hierarchical priors for learned image compression. In Proc. Adv. Neural Inform. Process. Syst., pages 10793–10802, 2018. 3, 5
+[37] Chong Mou, Xintao Wang, Liangbin Xie, Yanze Wu, Jian Zhang, Zhongang Qi, and Ying Shan. T2i-adapter: Learning adapters to dig out more controllable ability for text-to-image diffusion models. In Proc. AAAI Conf. Artif. Intell., pages 4296–4304, 2024. 7
+[38] Matthew J Muckley, Alaaeldin El-Nouby, Karen Ullrich, Herv ́e Je ́gou, and Jakob Verbeek. Improving statistical fidelity for neural image compression with implicit local likelihood models. In Proc. Int. Conf. Mach. Learn., pages 25426–25443, 2023. 2, 3, 5, 8
+[39] Tianpeng Pan, Lili Zhang, Lele Qu, and Yuxuan Liu. A coupled compression generation network for remote-sensing images at extremely low bitrates. IEEE Trans. Geosci. Remote Sens., 61, 2023. Art. no. 5608514. 4
+[40] Zhihong Pan, Xin Zhou, and Hao Tian. Extreme generative image compression by learning text embedding from diffusion models. arXiv:2211.07793, 2022. 2, 4
+[41] Taesung Park, Ming-Yu Liu, Ting-Chun Wang, and Jun-Yan Zhu. Semantic image synthesis with spatially-adaptive normalization. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit., pages 2337–2346, 2019. 5
+[42] Konpat Preechakul, Nattanat Chatthee, Suttisak Wizadwongsa, and Supasorn Suwajanakorn. Diffusion autoencoders: Toward a meaningful and decodable representation. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit., pages 10619–10629, 2022. 2, 3
+[43] Suraj Kiran Raman, Aditya Ramesh, Vijayakrishna Naganoor, Shubham Dash, Giridharan Kumaravelu, and Honglak Lee. Compressnet: Generative compression at extremely low bitrates. In Proc. IEEE Winter Conf. Appl. Comput. Vis., pages 2325–2333, 2020. 2, 3
+[44] Robin Rombach, Andreas Blattmann, Dominik Lorenz, Patrick Esser, and Bjo ̈rn Ommer. High-resolution image synthesis with latent diffusion models. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit., pages 10684–10695, 2022. 7, 8
+[45] Justin T Rucker, James E Fowler, and Nicolas H Younan. Jpeg2000 coding strategies for hyperspectral data. In Proc. IEEE Int. Geosci. Remote Sens. Symp., pages 128–131, 2005. 4
+[46] Shibani Santurkar, David Budden, and Nir Shavit. Generative compression. In Proc. Picture Coding Symp., pages 258–262, 2018. 3
+[47] Zhisen Tang, Hanli Wang, Xiaokai Yi, Yun Zhang, Sam Kwong, and C.-C. Jay Kuo. Joint graph attention and asymmetric convolutional neural network for deep image compression. IEEE Trans. Circuit Syst. Video Technol., 33(1): 421–433, 2023. 3
+[48] David S Taubman, Michael W Marcellin, and Majid Rabbani. Jpeg2000: Image compression fundamentals, standards and practice. J. Electron. Imag., 11(2):286–287, 2002. 1
+[49] Lucas Theis, Wenzhe Shi, Andrew Cunningham, and Ferenc Husz ́ar. Lossy image compression with compressive autoencoders. In Proc. Int. Conf. Learn. Representat., pages 1–19, 2022. 5 [50] G. K. Wallace. The jpeg still picture compression standard. IEEE Trans. Consum. Electron., 38(1):xviii–xxxiv, 1992. 1 [51] Di Wang, Qiming Zhang, Yufei Xu, Jing Zhang, Bo Du, Dacheng Tao, and Liangpei Zhang. Advancing plain vision transformer toward remote sensing foundation model. IEEE Trans. Geosci. Remote Sens., 61, 2022. Art. no. 5607315. 9 [52] Huiwen Wang, Liang Liao, Jing Xiao, Weisi Lin, and Mi Wang. Uplink-assist downlink remote-sensing image compression via historical referencing. IEEE Trans. Geosci. Remote Sens., 61, 2023. Art. no. 5621415. 4 [53] Junjue Wang, Zhuo Zheng, Ailong Ma, Xiaoyan Lu, and Yanfei Zhong. Loveda: A remote sensing landcover dataset for domain adaptive semantic segmentation. arXiv:2110.08733, 2021. 9
+[54] Shao Xiang and Qiaokang Liang. Remote sensing image compression with long-range convolution and improved nonlocal attention model. Signal Process., 209:109005, 2023. 4 [55] Shao Xiang and Qiaokang Liang. Remote sensing image compression based on high-frequency and low-frequency components. IEEE Trans. Geosci. Remote Sens., 62, 2024. Art. no. 5604715. 1, 4, 8 [56] Ruihan Yang and Stephan Mandt. Lossy image compression with conditional diffusion models. In Proc. Adv. Neural Inform. Process. Syst., pages 64971–64995, 2023. 2, 3 [57] Richard Zhang, Phillip Isola, Alexei A Efros, Eli Shechtman, and Oliver Wang. The unreasonable effectiveness of deep features as a perceptual metric. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit., pages 586–595, 2018. 8
+[58] Shihui Zhao, Shuyuan Yang, Jing Gu, Zhi Liu, and Zhixi Feng. Symmetrical lattice generative adversarial network for remote sensing images compression. ISPRS J. Photogramm. and Remote Sens., 176:169–181, 2021. 4 [59] Yinhao Zhu, Yang Yang, and Taco Cohen. Transformerbased transform coding. In Proc. Int. Conf. Learn. Representat., pages 1–35, 2022. 3 [60] Renjie Zou, Chunfeng Song, and Zhaoxiang Zhang. The devil is in the details: Window-based attention for image compression. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit., pages 17492–17501, 2022. 1, 3, 8
+16

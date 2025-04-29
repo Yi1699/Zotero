@@ -1,0 +1,591 @@
+1
+Towards Extreme Image Compression with Latent
+Feature Guidance and Diffusion Prior
+Zhiyuan Li, Yanhui Zhou, Hao Wei, Graduate Student Member, IEEE, Chenyang Ge, Jingwen Jiang
+Abstract—Image compression at extremely low bitrates (below 0.1 bits per pixel (bpp)) is a significant challenge due to substantial information loss. In this work, we propose a novel two-stage extreme image compression framework that exploits the powerful generative capability of pre-trained diffusion models to achieve realistic image reconstruction at extremely low bitrates. In the first stage, we treat the latent representation of images in the diffusion space as guidance, employing a VAE-based compression approach to compress images and initially decode the compressed information into content variables. The second stage leverages pre-trained stable diffusion to reconstruct images under the guidance of content variables. Specifically, we introduce a small control module to inject content information while keeping the stable diffusion model fixed to maintain its generative capability. Furthermore, we design a space alignment loss to force the content variables to align with the diffusion space and provide the necessary constraints for optimization. Extensive experiments demonstrate that our method significantly outperforms state-ofthe-art approaches in terms of visual performance at extremely low bitrates. The source code and trained models are available at https://github.com/huai-chang/DiffEIC.
+Index Terms—Image compression, diffusion models, content variables, extremely low bitrates.
+I. INTRODUCTION
+E
+XTREME image compression, which aims to compress images at bitrates below 0.1 bits per pixel (bpp), is critical in very bandwidth-constrained scenarios, such as satellite communications. Traditional compression standards, such as JPEG2000 [1], BPG [2], and VVC [3], are widely used in practice. However, these algorithms produce severe blocking artifacts at extremely low bitrates due to their block-based processing, see Fig. 1(b). Learning-based image compression has attracted significant interest and shows great potential to outperform traditional codecs. Based on their optimization objectives, learning-based methods can be roughly categorized into distortion-oriented [4], [5], [6], [7] and perception-oriented [8], [9], [10], [11] methods. Distortion-oriented methods are optimized for the rate-distortion function, which often leads to unrealistic reconstructions at low bitrates, typically manifested as blurring.
+This work is supported by the National Natural Science Foundation of China (NSFC62088102, NSFC62376208), China Telecom Group CorporationXi’an Jiaotong University Jointly Established Intelligent Cloud Network Science and Education Integration Innovation Research Institute (No.20221279ZKT03). (Corresponding author: Chenyang Ge.)
+The authors are with the National Key Laboratory of HumanMachine Hybrid Augmented Intelligence, Institute of Artificial Intelligence and Robotics, Xi’an Jiaotong University, Xi’an 710049, China (e-mail: lizhiyuan2839@163.com; zhouyh@mail.xjtu.edu.cn; haowei@stu.xjtu.edu.cn; cyge@mail.xjtu.edu.cn; jiangjingwen@stu.xjtu.edu.cn).
+Perception-oriented methods, on the other hand, aim to optimize the rate-distortion-perception function, leveraging techniques such as adversarial training [12] to improve perceptual quality. While these methods achieve significant improvements in visual quality, they often introduce unpleasant visual artifacts, especially at extremely low bitrates, as shown in Fig. 1(c). Recently, diffusion models have exhibited impressive generation ability in image and video generation [13], [14], [15], encouraging researchers to develop various diffusion-based perception-driven compression methods [16], [17], [18], [19]. For extreme image compression, some works leverage pretrained text-to-image diffusion models as prior knowledge to achieve realistic reconstructions at extremely low bitrates. For instance, Pan et al. [20] encode images as textual embeddings with extremely low bitrates, using pre-trained text-to-image diffusion models for realistic reconstruction. Lei et al. [21] directly transmit short text prompts and compressed image sketches, employing the pre-trained ControlNet [14] to produce reconstructions with high perceptual quality and semantic fidelity. However, these methods treat pre-trained text-to-image diffusion models as independent components, which limits their ability to fully exploit the generative capability of pretrained diffusion models, resulting in reconstruction results that are inconsistent with the original image (see Fig. 1(d)). Therefore, how to develop an effective diffusion-based extreme generative compression method is worth further exploration. In this work, we develop an end-to-end Diffusion-based Extreme Image Compression (DiffEIC) model that effectively combines compressive variational autoencoders (VAEs) [23] with a fixed stable diffusion model. First, to effectively convey information, we develop a VAE-based latent feature-guided compression module (LFGCM) that can adaptively select information essential for reconstruction, rather than using explicit information, such as text prompts and sketches in [21], to represent images. Specifically, this module employs a VAEbased compression method to compress images and initially decode the compressed information into content variables. To effectively utilize the knowledge encapsulated in the fixed stable diffusion model, these content variables are expected to align with the diffusion space. However, learning to map images to the diffusion space from scratch is challenging. To address this issue, in the latent feature-guided compression module, we introduce the latent representation of images in the diffusion space as external guidance to correct intermediate features and content variables. Second, we introduce a conditional diffusion decoding module (CDDM) to reconstruct images with the guidance of content variables. This module
+arXiv:2404.18820v4 [eess.IV] 4 Sep 2024
+
+
+2
+(a) Original (b) VVC, 0.0205 bpp (c) MS-ILLM, 0.0447 bpp (d) Text+Sketch, 0.0281 bpp (e) DiffEIC (Ours), 0.0201 bpp
+Fig. 1. Visual examples of the reconstructed results on the Kodak [22] dataset. The proposed DiffEIC produces much better results in terms of perception and fidelity. For example, the small attic is well reconstructed.
+employs the well-trained stable diffusion as a fixed decoder and injects external condition information via a trainable control module. Leveraging the powerful generative capability of stable diffusion, the proposed DiffEIC can produce realistic reconstructions even at extremely low bitrates. Furthermore, to optimize the model in an end-to-end manner, we design a space alignment loss to force content variables to align with the diffusion space and provide necessary constraints for optimization. With the help of these mentioned components, the proposed DiffEIC achieves favorable results compared to state-of-the-art approaches, as demonstrated in Fig. 1(e). In summary, the main contributions of this work are as follows: 1) To the best of our knowledge, we propose the first extreme image compression framework that combines compressive VAEs with pre-trained text-to-image diffusion models in an end-to-end manner. 2) We develop a latent feature-guided compression module to adaptively select information essential for reconstruction. By introducing external guidance, we effectively improve reconstruction fidelity at extremely low bitrates. 3) We propose a conditional diffusion decoding module that fully exploits the powerful diffusion prior contained in the well-trained stable diffusion to facilitate extreme image compression and improve realistic reconstruction. The remainder of this paper is organized as follows. The related works are summarized in Section II. The proposed method is described in Section III. The experiment results and analysis are presented in Section IV and Section V, respectively. Finally, we conclude our work in Section VI.
+II. RELATED WORK
+A. Lossy Image Compression
+Lossy image compression plays a crucial role in image storage and transmission. Traditional compression standards,
+such as BPG [2], HEVC [24] and VVC [3], are widely used in practice. However, they tend to introduce block artifacts due to the lack of consideration of spatial correlation between image blocks. In recent years, learned image compression has made significant progress and achieved impressive ratedistortion performance [25], [26]. The main success of these methods is attributed to the development of various transform networks and entropy models. For instance, Liu et al. [27] introduce a non-local attention module to improve transform networks. In [28], He et al. employ invertible neural networks (INNs) to mitigate the information loss problem. Zhu et al. [29] construct nonlinear transforms using swin-transformers, achieving superior compression performance compared to CNNs-based transforms. In [18], Yang et al. innovatively use conditional diffusion models as decoders. Furthermore, several methods [6], [7], [30] enhance performance by improving entropy models. For example, Minnen et al. [30] combine hierarchical priors with autoregressive models to reduce spatial redundancy within latent features. In [31], He et al. assume the redundancy in spatial dimension and channel dimension is orthogonal and propose a multi-dimension entropy model. Qian et al. [32] utilize a transformer to enable entropy models to capture long-range dependencies. Guo et al. [26] explore capturing the dependencies along both the spatial and channel dimensions by using the causal global contextual prediction.
+B. Extreme Image Compression
+In some practical scenarios, such as satellite communications, the bandwidth is too narrow to transmit the images or videos. To overcome this dilemma, extreme image compression towards low bitrates (e.g., below 0.1 bpp) is urgently needed. Several algorithms [10], [11], [33], [34], [35] leverage generative adversarial networks (GANs) for realistic reconstructions and bit savings. In [10], Agustsson et al. incorporate a multi-scale discriminator to synthesize details
+
+
+3
+that cannot be stored at extremely low bitrates. Mentzer et al. [34] explore normalization layers, generator and discriminator architectures, training strategies, as well as perceptual losses, achieving visually pleasing reconstructions at low bitrates. However, these approaches suffer from the unstable training of GANs and inevitably introduce unpleasant visual artifacts. Some approaches use prior knowledge to achieve extreme image compression. Yue et al. [36] describe input images based on the down-sampled version and handcrafted features, and use these descriptions to reconstuct the images from a large-scale image database. Their method can achieve impressive compression performance when the large-scale image database contains images that are highly correlated with the input images. Benefiting from the bijective and informationlossless property of invertible neural networks (INNs), Gao et al. leverage INNs to mitigate the significant information loss in extreme image compression [37]. Wei et al. employ invertible and generative priors to achieve extreme compression by rescaling images with extreme scaling factors (i.e., 16× and 32×) [38]. In [39], Li et al. employ physical priors (i.e., attenuation coefficient and ambient light) and the semantic prior for extreme underwater image compression, which may not generalize well to natural images with different scenarios. Jiang et al. utilize text descriptions as prior to guide image compression for better compression performance [40]. Inspired by the tremendous success of diffusion models in image generation, some methods [20], [21] use more powerful pre-trained text-to-image diffusion models as prior knowledge. In [20], Pan et al. encode images into short text embeddings and then generate high-quality images with pre-trained text-toimage diffusion models by feeding the text embeddings. Lei et al. [21] directly compress the short text prompts and binary contour sketches on the encoded side, and then use them as input to the pre-trained text-to-image diffusion model for reconstruction on the decoded side. However, these diffusionbased methods treat pre-trained text-to-image diffusion models as independent components, which limits their ability to fully exploit the generative capability of pre-trained diffusion models. In this work, we propose DiffEIC, a framework that efficiently incorporates compressive VAEs with pre-trained textto-image diffusion models in an end-to-end manner. Leveraging the nonlinear capability of compressive VAEs and the powerful generative capability of pre-trained text-to-image diffusion models, our DiffEIC achieves both high perceptual quality and high-fidelity image reconstruction at extremely low bitrates.
+C. Diffusion Models
+Inspired by non-equilibrium statistical physics [41], diffusion models convert real data distributions into simple, known distributions (e.g., Gaussian) through a gradual process of adding random noise, known as the diffusion process. Subsequently, they learn to reverse this diffusion process and construct desired data samples from noise (i.e., the reverse process). Denoising diffusion implicit models (DDPM) [42] improves upon the original diffusion model and has profoundly
+influenced subsequent research. The latent diffusion model (LDM) [13] significantly reduces computational costs by performing diffusion and reverse steps in the latent space. Stable diffusion is a widely used large-scale implementation of LDM. Owing to their flexibility, tractability, and superior generative capability, diffusion models have achieved remarkable success in various vision tasks. Due to the complexity of the diffusion process, training diffusion models from scratch is computationally demanding and time-consuming. To address this problem, some algorithms [14], [43], [44] introduce additional trainable networks to inject external conditions into fixed, pre-trained diffusion models. This strategy simplifies the exhaustive training from scratch while maintaining the robust capability of pre-trained diffusion models. In [14], Zhang et al. employ pre-trained textto-image diffusion models (e.g., stable diffusion) as a strong backbone with fixed parameters and reuse their encoding layers for controllable image generation. Similarly, Mou et al. [43] introduce lightweight T2I-Adapters to provide extra guidance for pre-trained text-to-image diffusion models. In [44], Lin et al. use the latent representation of coarse restored images as conditions to help the pre-trained diffusion models generate clean results. We note that the main success of these algorithms on image generation and restoration is due to the use of pre-trained diffusion models. The robust generative capability of such models motivates us to explore effective approaches for extreme image compression at low bitrates.
+III. METHODOLOGY
+In this section, we propose DiffEIC for extreme image compression. As shown in Fig. 2, the proposed DiffEIC consists of two primary stages: image compression and image reconstruction. Specifically, the former stage aims to compress images and generate content-related variables. The latter stage is designed for decoding the content variables into reconstructed images. Furthermore, a space alignment loss is introduced to force content variables to align with the diffusion space and provide necessary constraints for optimization.
+A. Image Compression with Compressive VAEs
+As shown in Fig. 2(a), we propose a latent feature-guided compression module (LFGCM) based on compressive VAEs [23]. This module leverages an additional guidance branch that utilizes the latent representation of images in the diffusion space to correct intermediate features and content variables. The encoding process, decoding process, and network details of LFGCM are introduced below. 1) Encoding Process: Given an input image x, we first obtain external guidance zg with stable diffusion’s encoder E as follows:
+zg = E(x). (1)
+Then zg is used to guide the extraction of the latent representation y and the side information z, sequentially, which can be expressed as:
+y = Ne(x, zg), z = Nhe(y, zg), (2)
+
+
+4
+Control Module
+Encoder
+AE
+AD
+Hyper Dec
+Hyper Enc
+AE
+AD
+Decoder
+Image Compression
+CDDM CDDM
+LFGCM
+Image Reconstruction
+Main
+Guidance
+Fixed
+Zero Conv
+Concat
+QQ
+noise estimator
+···
+(a) (b)
+··· CDDM
+Fig. 2. The two-stage pipeline of the proposed DiffEIC. Image Compression: Initially, we leverage the VAE-based latent feature-guided compression module (LFGCM) to adaptively select information essential for reconstruction and obtain zc. Image Reconstruction: We leverage the conditional diffusion decoding module (CDDM) for realistic image reconstruction and obtain xˆ. The CDDM contains a trainable control module and a fixed noise estimator. Note that the control module and noise estimator are connected with zero convolutions (zero-initialized convolution layers).
+where Ne denotes the encoder network and Nhe denotes the hyper-encoder network. Then we apply a hyper-decoder to draw a parameter ψ from the quantized side information zˆ:
+zˆ = Q(z), ψ = Nhd(zˆ), (3)
+where Nhd denotes the hyper-decoder and Q(·) denotes the quantization operation, i.e., adding uniform noise during training and performing rounding operation during inference. Finally, the context model Cm uses ψ and the quantized latent representation yˆ = Q(y) to predict the Gaussian entropy parameters (μ, σ) for approximating the distribution of yˆ. 2) Decoding process: Given the quantized yˆ and zˆ, we first use a information extraction network fc to extract a representation w from zˆ, which can be expressed as:
+w = fc(zˆ). (4)
+The external guidance information, originally contained in zg, is captured in w. This effectively compensates for the unavailability of zg during the decoding process. Instead of directly reconstructing the original input image, we initially decode yˆ into a content variable zc:
+zc = Nd(yˆ, w), (5)
+where Nd denotes the decoder network. The content variable zc is further decoded in the subsequent image reconstruction stage using diffusion prior. 3) Network Details: Fig. 3 illustrates the network architecture of LFGCM. The information extraction network fc has the same structure as the hyper-decoder Nhd, and we adopt
+context model Cm proposed by He et al. [31]. The guidance components (the elements denoted by red arrows, SF T and SF T Resblk) first use a series of convolutions to resize the external feature G to the appropriate dimensions. Then the SFT layers [45] are employed to inject the network with external guidance information. Specifically, given an external feature G and an intermediate feature map F , a pair of affine transformation parameters (i.e., α for scaling and β for shifting) is generated as follows:
+α, β = Φθ(G), (6)
+where Φθ denotes a stack of convolutions. Then the tuned feature map F ′ can be generated by:
+F ′ = SF T (F, G) = α ⊗ F + β, (7)
+where ⊗ denotes element-wise product.
+B. Image Reconstruction with Diffusion Prior
+As shown in Fig. 2(b), we propose a conditional diffusion decoding module (CDDM) to reconstruct images with the guidance of content variables. To maintain the generative capability of stable diffusion, we keep it fixed and employ a small control module to inject content information. In this section, we introduce stable diffusion and the proposed CDDM sequentially. 1) Stable Diffusion: Stable diffusion first employs an encoder E to encode an image x into a latent representation z0 = E(x). Then z0 is progressively corrupted by adding Gaussian noise through a Markov chain. The intensity of the
+
+
+5
+LReLU
+SFT
+Conv k3s1
+SFT
+LReLU
+Conv k3s1
+GELU
+Tconv k5s2
+Tconv k5s2
+GELU
+Tconv k3s1
+Q
+Element-wise Summation
+Element-wise Product
+Quantization
+Conv k3s1
+GELU
+Conv k1s1
+Conv k3s2
+GELU
+Conv k1s1
+RB ↓2
+RBneck ×3
+SFT
+RB ↓2
+RBneck ×3
+RB ↓2
+RBneck ×3
+GELU
+Tconv k3s1
+Tconv k5s2
+GELU
+Tconv k5s2
+AE
+AD
+Q
+Q
+RB ↓2
+RBneck ×3
+SFT
+Conv k3s1
+SFT Resblk
+SFT Resblk
+Conv k3s1
+Conv k3s1
+SFT
+SFT
+SFT Resblk
+SFT Resblk
+GELU
+Conv k5s2
+Conv k5s2
+GELU
+RBneck ×3
+RB ↑2
+Conv k3s1
+SFT
+SFT
+RBneck ×3
+Conv k3s1
+SFT Resblk
+SFT Resblk
+Conv k3s1
+GELU
+Conv k1s1
+Conv k3s2
+GELU
+Conv k1s1
+Conv k3s2
+GELU
+Conv k1s1
+Conv k3s2
+GELU
+Conv k1s1
+Conv k1s1
+Conv k3s1
+LReLU
+Conv k3s1
+Conv k3s1
+Conv k1s1
+GELU
+Conv k3s1
+Conv k1s1
+GELU
+Tconv k3s2
+AE
+AD
+GELU
+Conv k3s1
+GELU
+Conv k3s1
+Conv k3s1
+Fusion
+Conv k3s1
+Fusion
+GELU
+Conv k3s1
+GELU
+Conv k3s1
+Fig. 3. The architecture of the proposed LFGCM. Conv k3s1 denotes convolution with 3×3 filters and stride 1. T conv k3s1 denotes transposed convolution with 3 × 3 filters and stride 1. RB denotes residual block [46]. RBneck denotes residual bottleneck block [46]. LReLU denotes the LeakyReLU function. AE and AD denote arithmetic encoder and decoder, respectively. Cm denotes context model. F usion denotes the fusion method. The black and red arrows denote main and guidance flow, respectively.
+added noise at each step is controlled by a default noise schedule βt. This process can be expressed as follows:
+zt = √α ̄tz0 + √1 − α ̄tε, t = 1, 2, · · · , T, (8)
+where ε ∼ N (0, I) is a sample from a standard Gaussian distribution, αt = 1 − βt and α ̄t = Qt
+i=1 αi. The corrupted representation zt approaches a Gaussian distribution as t increases. To iteratively convert zT back to z0, a noise estimator εθ with U-Net [47] architecture is learned to predict the added noise ε at each time step t:
+Lsd = Ez0,c,t,ε∥ε − εθ(zt, c, t)∥2, (9)
+where c denotes control conditions such as text prompts and images. After completing the iterative denoising process, a decoder D is used to map z0 back into pixel space.
+2) Conditional Diffusion Decoding Module: The CDDM is designed to leverage the powerful generative capability of fixed stable diffusion to reconstruct image x with realistic details at extremely low bitrates. Inspired by ControlNet [14], we introduce a control module to inject content information contained in zc into the denoising process. This control module has the same encoder and middle block architecture as the noise estimator εθ. Notably, we reduce the channel number of the control module to 20% of the original, which results in a slight performance decrease but significantly enhances inference speed (see Section V-B). In addition, we increase the channel number of the first convolution layer to 8 to accommodate the concatenated input of the content variable zc and the latent noise zt. Through the control module, we obtain a series of conditional features that contain content
+information and align with the internal knowledge of stable diffusion. These conditional features are then added to the encoder and decoder of the noise estimator εθ using 1×1 convolutions. Leveraging the powerful generative capability encapsulated in pre-trained stable diffusion, we can obtain a high perceptual quality reconstruction xˆ even at extremely low bitrates.
+C. Model Objectives
+1) Noise Estimation Loss: Due to the external condition zc introduced by proposed CDDM, Eq. (9) is modified as:
+Lne = Ez0,c,t,ε,zc ∥ε − εθ(zt, c, t, zc)∥2, (10)
+where text prompt c is set to empty. 2) Rate loss: We employ the rate loss Lrate to optimize the rate performance as:
+Lrate = R(yˆ) + R(zˆ), (11)
+where R(·) denotes the bitrate. 3) Space Alignment Loss: As the noise estimation loss is unable to provide effective constraints for LFGCM, we design a space alignment loss to force the content variables to align with the diffusion space, providing necessary constraints for optimization:
+Lsa = ∥zc − E(x)∥2. (12)
+In summary, the total loss of DiffEIC is defined as:
+Ltotal = λLrate + λsaLsa + λneLne, (13)
+where λsa and λne denote the weights for space alignment loss and noise estimation loss, respectively. λ is used to achieve a trade-off between rate and reconstruction quality.
+
+
+6
+0.02 0.04 0.06 0.08 0.10 0.12 0.14
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.02 0.04 0.06 0.08 0.10 0.12 0.14 bpp
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+LPIPS on Kodak
+0.02 0.04 0.06 0.08 0.10 0.12 0.14 bpp
+3.5
+4.0
+4.5
+5.0
+5.5
+6.0
+6.5
+7.0
+7.5
+NIQE on Kodak
+0.02 0.04 0.06 0.08 0.10 0.12 0.14 bpp
+0.10
+0.15
+0.20
+0.25
+0.30
+DISTS on Kodak
+0.02 0.04 0.06 0.08 0.10 0.12 0.14
+0.00
+0.01
+0.02
+0.03
+0.04
+0.05
+0.06
+0.07
+BPG VVC ELIC HiFiC Text+Sketch PerCo Wei et al. MS-ILLM DiffEIC (Ours)
+0.02 0.04 0.06 0.08 0.10 0.12 0.14 bpp
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+LPIPS on Tecnick
+0.02 0.04 0.06 0.08 0.10 0.12 0.14 bpp
+3.5
+4.0
+4.5
+5.0
+5.5
+6.0
+6.5
+7.0
+NIQE on Tecnick
+0.02 0.04 0.06 0.08 0.10 0.12 0.14 bpp
+0.05
+0.10
+0.15
+0.20
+0.25
+0.30
+DISTS on Tecnick
+0.02 0.04 0.06 0.08 0.10 0.12 0.14 bpp
+20
+30
+40
+50
+60
+70
+80
+90
+FID on Tecnick
+0.02 0.04 0.06 0.08 0.10 0.12 0.14 bpp
+0.000
+0.005
+0.010
+0.015
+0.020
+0.025
+KID on Tecnick
+0.02 0.04 0.06 0.08 0.10 0.12 0.14 bpp
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+LPIPS on CLIC2020
+0.02 0.04 0.06 0.08 0.10 0.12 0.14 bpp
+3.5
+4.0
+4.5
+5.0
+5.5
+6.0
+6.5
+7.0
+7.5
+NIQE on CLIC2020
+0.02 0.04 0.06 0.08 0.10 0.12 0.14 bpp
+0.05
+0.10
+0.15
+0.20
+0.25
+0.30
+DISTS on CLIC2020
+0.02 0.04 0.06 0.08 0.10 0.12 0.14 bpp
+10
+20
+30
+40
+50
+60
+70
+FID on CLIC2020
+0.02 0.04 0.06 0.08 0.10 0.12 0.14 bpp
+0.000
+0.005
+0.010
+0.015
+0.020
+0.025 KID on CLIC2020
+Fig. 4. Quantitative comparisons with state-of-the-art methods in terms of perceptual quality (LPIPS↓ / NIQE↓ / DISTS↓ / FID↓ / KID↓) on the Kodak [22], Tecnick [48], and CLIC2020 [49] datasets.
+0.02 0.04 0.06 0.08 0.10 0.12 0.14 bpp
+0.65
+0.70
+0.75
+0.80
+0.85
+0.90
+MS-SSIM on Kodak
+0.02 0.04 0.06 0.08 0.10 0.12 0.14 bpp
+0.70
+0.75
+0.80
+0.85
+0.90
+0.95
+MS-SSIM on Tecnick
+0.02 0.04 0.06 0.08 0.10 0.12 0.14 bpp
+0.75
+0.80
+0.85
+0.90
+0.95
+MS-SSIM on CLIC2020
+0.02 0.04 0.06 0.08 0.10 0.12 0.14 bpp
+20
+22
+24
+26
+28
+PSNR on Kodak
+0.02 0.04 0.06 0.08 0.10 0.12 0.14 bpp
+18
+20
+22
+24
+26
+28
+30
+PSNR on Tecnick
+0.025 0.050 0.075 0.100 0.125 0.150 bpp
+20
+22
+24
+26
+28
+30
+PSNR on CLIC2020
+BPG VVC ELIC HiFiC PerCo Wei et al. MS-ILLM DiffEIC (Ours) SD AutoEncoder
+Fig. 5. Quantitative comparisons with state-of-the-art methods in terms of pixel fidelity (MS-SSIM↑ / PSNR↑) on the Kodak [22], Tecnick [48], and CLIC2020 [49] datasets.
+IV. EXPERIMENTS
+A. Experimental Settings
+1) Implementation: We train DiffEIC on the LSDIR [50] dataset, which contains 84,991 high-quality training images. The images are randomly cropped to 512×512 resolution. In our experiments, we use Stable Diffusion 2.1-base1 as the diffusion prior. We train our model in an end-to-end manner using Eq. (13), where λsa and λne are set to 2 and 1, respectively. To achieve different coding bitrates, we choose λ from {1, 2, 4, 8, 16}. For optimization, we utilize Adam [51] optimizer with β1 = 0.9 and β2 = 0.999 and set the learning rate to 1×10−4. The training batch size is set to 4. Inspired by previous work [6], we first train the proposed DiffEIC with λ = 1 for 300K iterations, and then adapt
+1https://huggingface.co/stabilityai/stable-diffusion-2-1-base
+them using target λ for another 200K iterations. We set the learning rate to 2×10−5 during the fine-tuning process. For inference, we adopt spaced DDPM sampling [52] with 50 steps to reconstruct the images. All experiments are conducted on a single NVIDIA GeForce RTX 4090 GPU. 2) Test Data: For evaluation, we use three commonly used benchmarks: Kodak [22], Tecnick [48], and CLIC2020 [49] datasets. The Kodak dataset contains 24 natural images with a resolution of 768×512. The Tecnick dataset contains 140 images with 1200×1200 resolution. The CLIC2020 dataset has 428 high-quality images. For the Tecnick and CLIC2020 datasets, we resize the images so that the shorter dimension is equal to 768px. Then we center-crop the image with 768×768 resolution for evaluation [18]. 3) Metrics: For quantitative evaluation, we employ several established metrics to assess the perceptual quality of
+
+
+7
+(a) Original (b) ELIC (c) HiFiC (d) MS-ILLM (e) Text+Sketch (f) PerCo (g) Wei et al. (h) DiffEIC (Ours)
+bpp / DISTS↓ 0.1784 / 0.1296 0.1901 / 0.1178 0.1662 / 0.0741 0.0246 / 0.3135 0.1258 / 0.0674 0.0792 / 0.1431 0.0844 / 0.0658
+bpp / DISTS↓ 0.0947 / 0.2136 0.0800 / 0.1193 0.0893 / 0.0766 0.0228 / 0.2661 0.1258 / 0.0704 0.0838 / 0.0891 0.0664 / 0.0775
+bpp / DISTS↓ 0.0538 / 0.2610 0.0453 / 0.1789 0.0501 / 0.1207 0.0286 / 0.2688 0.0312 / 0.1651 0.0216 / 0.2046 0.0182 / 0.1804
+Fig. 6. Visual comparisons of the proposed DiffEIC framework with the MSE-optimized ELIC [31], the GANs-based HiFiC [34] and MS-ILLM [35], the diffusion-based Text+Sketch [21] and PerCo [19], and the method by Wei et al. [38] on the CLIC2020 [49] dataset. For each method, the bpp and DISTS values are shown beneath images. Compared to other methods, our method produces more realistic and faithful reconstructions with lower bpp.
+results, including the Learned Perceptual Image Patch Similarity (LPIPS) [53], Naturalness Image Quality Evaluator (NIQE) [54], Deep Image Structure and Texture Similarity (DISTS) [55], Fre ́chet Inception Distance (FID) [56], and Kernel Inception Distance (KID) [57]. Meanwhile, we employ the Peak Signal-to-Noise Ratio (PSNR) and Multi-Scale Structural Similarity Index (MS-SSIM) [58] to measure the fidelity of reconstruction results. Furthermore, the bits per pixel (bpp) is used to evaluate rate performance. Note that FID and KID are calculated on patches of 256×256 resolution according to [34]. Since the Kodak dataset is too small to calculate FID and KID, we do not report FID or KID results on it.
+B. Comparisons With State-of-the-art Methods
+We compare our DiffEIC with state-of-the-art learned image compression methods, including ELIC [31], HiFiC [34], Text+Sketch [21], PerCo [19], Wei et al. [38], and MS-ILLM [35]. For PerCo [19], we use PerCo(SD)2 as a substitute, since the official source codes and models are not available. In addition, we compare with traditional image compression methods BPG [2] and VVC [3]. For BPG software, we optimize image quality and compression efficiency with the following settings: “YUV444” subsampling mode, “x265” HEVC implementation, “8-bit” depth, and “YCbCr” color space. For VVC, we employ the reference software VTM23.03 with intra configuration.
+1) Quantitative Comparisons: Fig. 4 shows the rateperception curves at low bitrates for different methods over the three datasets. It can be observed that the proposed DiffEIC performs much better than BPG [2], VVC [3], and ELIC
+2https://github.com/Nikolai10/PerCo/tree/master 3https://vcgit.hhi.fraunhofer.de/jvet/VVCSoftware VTM/-/tree/master
+[31] for all perceptual metrics. Although the Text+Sketch [21] achieves the best NIQE value of all the methods, it fails to ensure the pixel fidelity, where the LPIPS value is the highest. For other generative image compression methods, the proposed DiffEIC yields lower DISTS, FID, and KID values, indicating that DiffEIC excels in preserving the perceptual integrity of the images and producing reconstructions with minimal perceptual differences from the originals.
+The rate-distortion performance comparison is shown in Fig. 5. Since Text+Sketch [21] has ignored the pixel-level fidelity of the reconstruction results, we do not report its ratedistortion performance. Compared to Wei et al. [38] and PerCo [19], the proposed DiffEIC achieves better PSNR and MSSSIM values. However, we find that DiffEIC is worse than other comparative methods. The reason behind this is that the proposed DiffEIC uses stable diffusion prior for realistic detail reconstruction at extremely low bitrates, which does not ensure pixel-level accuracy. To further demonstrate this, we report the PSNR and MS-SSIM values of the stable diffusion autoencoder (see the black horizontal line in Fig. 5), which can be treated as the upper bound of the performance of DiffEIC. Although it sacrifices some fidelity, the proposed DiffEIC effectively capture realism at extremely low bitrates.
+2) Qualitative Comparisons: Fig. 6 shows visual comparisons among the evaluated methods at extremely low bitrates. Compared to other methods, DiffEIC yields reconstructions with higher perceptual quality, fewer artifacts, and more realistic detail at extremely low bitrates. For example, DiffEIC preserves the texture and details of the background that are lost or distorted in other methods (see the first row). Similarly, the DiffEIC is able to produce more realistic facial detail than other methods (see the second row).
+
+
+8
+TABLE I ENCODING AND DECODING SPEED ON KODAK [22] DATASET IN TERMS OF SECONDS.
+Type Method Denoising Step Encoding Speed (in sec.) Decoding Speed (in sec.) Platform
+Traditional method VVC – 13.862 ± 9.821 0.066 ± 0.006 13th Core i9-13900K
+VAE-based method ELIC – 0.056 ± 0.006 0.081 ± 0.011 RTX4090
+GAN-based methods
+HiFiC – 0.038 ± 0.004 0.059 ± 0.004 RTX4090 MS-ILLM – 0.038 ± 0.004 0.059 ± 0.004 RTX4090 Wei et al. – 0.050 ± 0.003 0.179 ± 0.005 RTX4090
+Diffusion-based methods
+Text+Sketch 25 62.045 ± 0.516 12.028 ± 0.413 RTX4090 PerCo 5 0.080 ± 0.018 0.665 ± 0.009 A100 PerCo 20 0.080 ± 0.018 2.551 ± 0.018 A100 DiffEIC (Ours) 20 0.128 ± 0.005 1.964 ± 0.009 RTX4090 DiffEIC (Ours) 50 0.128 ± 0.005 4.574 ± 0.006 RTX4090
+3) Complexity Comparisons: We further compare the proposed DiffEIC with state-of-the-art image compression methods in terms of complexity. For PerCo [19], we directly show the results reported in their paper, since the official source codes are not available. Table I summarizes the average encoding/decoding time in seconds with its standard deviation on the Kodak dataset. On the one hand, it is worth noting that the diffusion-based methods have higher encoding and decoding complexity than the VAE-based and GAN-based methods. On the other hand, the proposed DiffEIC encoder is significantly faster than Text+Sketch [21]. Compared to PerCo [19], the proposed DiffEIC is able to achieve comparable encoding speed and faster decoding speed with the same number of denoising steps.
+V. ANALYSIS AND DISCUSSIONS
+To better analyze the proposed method, we perform ablation studies and discuss its limitations.
+A. Ablation of Latent Feature Guidance
+In this part, we analyze the proposed Latent Feature Guidance (LFG), which is used to correct content variables. Specifically, we remove the guidance components and retrain the model from scratch using the same experimental settings.
+0.02 0.04 0.06 0.08 0.10 0.12 bpp
+0.05
+0.10
+0.15
+0.20
+feature distance
+W/ LFG W/o LFG
+0.02 0.04 0.06 0.08 0.10 0.12 bpp
+0.05
+0.10
+proportion (%)
+W/ LFG W/o LFG
+(a) (b)
+Fig. 7. Ablation studies of latent feature guidance on CLIC2020 [49] dataset. (a) Euclidean distance between content variables and corresponding latent representations; (b) Proportion of bits allocated to the hyper prior.
+(a) Original (b) W/o LFG (c) Ours
+bpp / MS-SSIM↑ / DISTS↓ 0.0076 / 0.55 / 0.2231 0.0085 / 0.60 / 0.2000
+Fig. 8. Impact of latent feature guidance on reconstruction results.
+Fig. 7(a) demonstrates that the distance between the content variables and corresponding latent representations is significantly reduced after introducing the LFG strategy, which implies that more accurate information is provided for the subsequent denoising process. As shown in Table II, the removal of guidance components results in a slightly faster encoding speed but a noticeable degradation in performance, with a 23.88% increase in bitrates at the same DISTS metric and a 13.19% increase in bitrates at the same LPIPS metric. The visual comparison is presented in Fig. 8. As seen from this example, with the help of LFG strategy, our DiffEIC achieves more accurate facial reconstruction at extremely low bitrates. This further demonstrates that the LFG strategy contributes to increased fidelity. Note that the representation w in the decoder side is extracted from the quantized side information zˆ. The bitrates of the additional information contained in zˆ need to be analyzed further. To evaluate the impact of the LFG on the bitrates of the hyper prior, we compare the bits allocated to the hyper prior with and without LFG. Specifically, we compute the proportion of bits allocated to hyper prior as:
+P = R(zˆ)
+R(zˆ) + R(yˆ) (14)
+where R(·) is the bitrate. As shown in Fig. 7(b), using LFG does not significantly affect the proportion of bits allocated to the hyper prior. The reason for this phenomenon is that the hyper prior zˆ requires extremely fewer bits than the quantized latent representation yˆ, which is also observed in [23], so the
+
+
+9
+TABLE II ABLATION OF LATENT FEATURE GUIDANCE (LFG), DENOISING STEPS (DS), AND THE CHANNEL NUMBER (CN) OF THE CONTROL MODULE. BD-RATE [59] IS CALCULATED ON CLIC2020 [49] DATASET, WITH DISTS AND LPIPS AS THE METRIC.
+Methods Hyper-Parameter BD-Rate (%) Speed (in sec.)
+CN (%) Denoising Steps DISTS LPIPS Encoding Speed Decoding Speed
+DiffEIC (CN)
+100 50 -5.36 -2.57
+0.128 ± 0.005
+6.012 ± 0.012 50 50 -2.99 -2.28 5.068 ± 0.020 100 37 4.11 0.80 4.578 ± 0.013 50 43 0.96 0.19 4.474 ± 0.019
+DiffEIC (W/o LFG) 20 50 23.88 13.19 0.062 ± 0.009 4.574 ± 0.006 DiffEIC (Ours) 20 50 0 0 0.128 ± 0.005 4.574 ± 0.006
+DiffEIC (DS)
+20 20 22.51 6.20
+0.128 ± 0.005
+1.964 ± 0.009 20 10 37.83 13.26 1.089 ± 0.009 20 5 49.93 21.68 0.646 ± 0.005 20 0 59.50 35.77 0.212 ± 0.006
+additional information conveyed by the hyper prior is small and the bit consumption of these information can be ignored. We further explore different fusion methods in the proposed LFGCM, including the addition, concatenation, and crossattention. As shown in Table III, the fusion method using addition causes a severe degradation in compression performance. In addition, using the cross-attention mechanism achieves better compression performance than our method, while it increases the computational complexity by 31% in terms of MACs. Considering the trade-off between performance and computational complexity, we choose the concatenation method for feature fusion in the proposed DiffEIC.
+TABLE III ABLATION STUDIES OF THE FUSION METHOD IN LFGCM. BD-RATE IS EVALUATED ON CLIC2020 DATASET AND THE MACS OF DIFFERENT FUSION METHODS ARE CALCULATED BASED ON 768×512 IMAGE PATCH.
+Methods BD-Rate (%) MACs (G)
+DISTS LPIPS NIQE MS-SSIM
+Addition 6.66 5.24 20.46 2.43 1.13 (-17%) Cross-Attention -0.45 -0.67 -2.08 -1.58 1.79 (+31%) Concatenation (Ours) 0 0 0 0 1.36 (+ 0%)
+B. Effect of the Channel Number in Control Module
+We further analyze how the number of channels of the control module affects the performance and complexity of the proposed DiffEIC. In our default setting, we reduce the number of channels to 20% of the original. We also increase the number of channels by setting the percentage to 50% and 100%. As shown in Table II, using more channels is able to bring a slight improvement in performance, where the lower DISTS and LPIPS values are achieved. However, it inevitably leads to the decoding complexity up. For example, the decoding speed of the proposed DiffEIC with 100% channels decrease by about 31% compared to the default setting. When the decoding time is comparable, using 20% channels results in slightly better performance than using higher percentages of channels. This indicates that reducing the number of channels is more effective in balancing performance and inference speed than
+simply reducing the number of denoising steps. To achieve a tradeoff between performance and inference speed, we choose the 20% in the proposed DiffEIC.
+C. Effect of Denoising Steps
+For the proposed DiffEIC, we relate the decoding complexity to the number of denoising steps. As shown in Table II, the decoding complexity can be reduced by using fewer denoising steps. Fig. 9 shows the reconstruction performance using different numbers of denoising steps. We note that increasing the number of denoising steps is able to improve the perceptual quality of the decoded results, where the perceptual metrics (DISTS, LPIPS, and NIQE) are better. The visual comparisons in Fig. 10 further demonstrate that using more denoising steps facilitates the improvement of the reconstruction performance, where the details of the hair are well reconstructed.
+D. Effectiveness of Space Alignment Loss
+The proposed space alignment loss is used to provide constraints for LFGCM. To illustrate the necessity of this loss, we attempt to train DiffEIC without the space alignment loss by removing Lsa from Eq. (13). As shown in Fig. 11(a), without the space alignment loss, the bits per pixel (bpp) curves invariably converge to zero during training, regardless of the selected values for λ and λne. We attribute this phenomenon to the noise estimation loss being independent of the input images, thus failing to provide effective constraints for LFGCM. In contrast, Fig. 11(b) demonstrates the effectiveness of incorporating the space alignment loss. With this loss in place, the bpp curves stabilize and converge to meaningful values during training, indicating that the space alignment loss successfully enforces necessary constraints. Furthermore, the space alignment loss forces content variables to align with the diffusion space, contributing to enhanced reconstruction quality, as mentioned in Section V-A.
+E. Robustness to Different Image Resolutions
+Since we use the stable diffusion for image reconstruction, some may wonder about whether our method is able to achieve
+
+
+10
+0.02 0.04 0.06 0.08 0.10 0.12 bpp
+0.05
+0.10
+0.15
+0.20
+0.25
+0.30
+DISTS
+0.02 0.04 0.06 0.08 0.10 0.12 bpp
+0.10
+0.15
+0.20
+0.25
+0.30
+0.35
+0.40
+LPIPS
+0.02 0.04 0.06 0.08 0.10 0.12 bpp
+4
+5
+6
+7
+8
+NIQE
+0.02 0.04 0.06 0.08 0.10 0.12 bpp
+0.75
+0.80
+0.85
+0.90
+MS-SSIM
+0 step 5 steps 10 steps 20 steps 50 steps
+Fig. 9. Quantitative comparisons of different denoising steps on the CLIC2020 [49] dataset. 0 step denotes directly using the decoder D to decode content variables.
+(a) Original (b) 0 step (c) 5 steps (d) 10 steps (e) 20 steps (f) 50 steps
+0.0739 bpp
+MS-SSIM↑ / DISTS↓ 0.9682 / 0.0824 0.9695 / 0.0748 0.9703 / 0.0728 0.9667 / 0.0700 0.9662 / 0.0677
+0.0174 bpp
+MS-SSIM↑ / DISTS↓ 0.8842 / 0.2585 0.8733 / 0.2293 0.8755 / 0.1993 0.8649 / 0.1752 0.8641 / 0.1701
+Fig. 10. Visual comparisons of different denoising steps.
+0.00
+0.25 = 1.00, ne = 1
+0.00
+0.25 = 0.50, ne = 1
+0.00
+0.25
+bits per pixel (bpp)
+= 0.25, ne = 1
+0.00
+0.25 = 1.00, ne = 2
+0 50000 100000 iters
+0.00
+0.25 = 1.00, ne = 4
+0 100000 200000 iters
+0.00
+0.02
+0.04
+0.06
+0.08
+0.10
+0.12
+0.14
+0.16
+0.18
+0.20
+0.22
+0.24
+bits per pixel (bpp)
+= 1, sa = 2, ne = 1 = 2, sa = 2, ne = 1 = 4, sa = 2, ne = 1 = 8, sa = 2, ne = 1 = 16, sa = 2, ne = 1
+(a) W/o space alignment loss (b) W/ space alignment loss
+Fig. 11. Effectiveness of the space alignment loss for end-to-end training.
+image compression with different resolutions. To answer this question, we use images with different resolutions, such as 256×256, 512×768, and 512×1538, for evaluation. As shown in Fig. 12, the proposed DiffEIC is able to reconstruct visually pleasing results under different image resolutions. In addition, we believe that our method is capable of processing ultrahigh definition images (i.e., 4K and 8K) using the blockbased processing strategy when the computational resources are limited.
+256 512 768
+512 768 512 256
+avg bpp / avg DISTS↓ 0.0915 / 0.0851
+Fig. 12. Reconstruction results at different resolutions. On the left are the original images and on the right are the decoded results.
+F. Limitation
+Although the proposed DiffEIC framework achieves favorable reconstructions at extremely low bitrates, it still has some limitations. 1) While text is an important component in pre-trained text-to-image diffusion models, its application has not yet been explored within our framework. The work of
+
+
+11
+Text+Sketch [21] demonstrates the powerful ability of text in extracting image semantics, encouraging us to further leverage text to enhance our method in future work. 2) Due to using a diffusion model as the decoder, the DiffEIC framework requires more computational resources and longer inference times compared to other VAE-based compression methods. Using more advanced sampling methods may be a solution to alleviate the computing burden. 3) Due to the limitations of the stable diffusion autoencoder, DiffEIC exhibits lower performance on pixel-wise distortion metrics compared to other methods. Future work will focus on improving the balance between pixel-wise accuracy and perceptual quality.
+VI. CONCLUSION
+In this paper, we propose a novel extreme image compression framework, named DiffEIC, which combines compressive VAEs with pre-trained text-to-image diffusion models to achieve realistic and high-fidelity reconstructions at extremely low bitrates (below 0.1 bpp). First, we introduce a VAEbased latent feature-guided compression module to adaptively select information essential for reconstruction. This module compresses images and initially decodes them into content variables. The latent feature guidance strategy effectively improves reconstruction fidelity. Second, we propose a conditional diffusion decoding module that leverages the powerful generative capability of pre-trained stable diffusion to reconstruct images with realistic details. Finally, we design a simple yet effective space alignment loss to optimize DiffEIC within a unified framework. Extensive experiments demonstrate the superiority of DiffEIC and the effectiveness of the proposed modules.
+REFERENCES
+[1] David S Taubman, Michael W Marcellin, and Majid Rabbani. Jpeg2000: Image compression fundamentals, standards and practice. Journal of Electronic Imaging, 11(2):286–287, 2002. [2] Fabrice Bellard. Bpg image format. https://bellard.org/bpg/. [3] Benjamin Bross, Ye-Kui Wang, Yan Ye, Shan Liu, Jianle Chen, Gary J Sullivan, and Jens-Rainer Ohm. Overview of the versatile video coding (vvc) standard and its applications. IEEE Transactions on Circuits and Systems for Video Technology, 31(10):3736–3764, 2021.
+[4] Jinming Liu, Heming Sun, and Jiro Katto. Learned image compression with mixed transformer-cnn architectures. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, pages 14388–14397, 2023. [5] Renjie Zou, Chunfeng Song, and Zhaoxiang Zhang. The devil is in the details: Window-based attention for image compression. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition, pages 17492–17501, 2022. [6] David Minnen and Saurabh Singh. Channel-wise autoregressive entropy models for learned image compression. In 2020 IEEE International Conference on Image Processing (ICIP), pages 3339–3343. IEEE, 2020. [7] Dailan He, Yaoyan Zheng, Baocheng Sun, Yan Wang, and Hongwei Qin. Checkerboard context model for efficient learned image compression. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, pages 14771–14780, 2021. [8] Oren Rippel and Lubomir Bourdev. Real-time adaptive image compression. In International Conference on Machine Learning, pages 29222930. PMLR, 2017. [9] Yochai Blau and Tomer Michaeli. Rethinking lossy compression: The rate-distortion-perception tradeoff. In International Conference on Machine Learning, pages 675–685. PMLR, 2019. [10] Eirikur Agustsson, Michael Tschannen, Fabian Mentzer, Radu Timofte, and Luc Van Gool. Generative adversarial networks for extreme learned image compression. In Proceedings of the IEEE/CVF International Conference on Computer Vision, pages 221–231, 2019.
+[11] Shubham Dash, Giridharan Kumaravelu, Vijayakrishna Naganoor, Suraj Kiran Raman, Aditya Ramesh, and Honglak Lee. Compressnet: Generative compression at extremely low bitrates. In 2020 IEEE Winter Conference on Applications of Computer Vision (WACV), pages 23142322. IEEE, 2020. [12] Ian Goodfellow, Jean Pouget-Abadie, Mehdi Mirza, Bing Xu, David Warde-Farley, Sherjil Ozair, Aaron Courville, and Yoshua Bengio. Generative adversarial nets. Advances in neural information processing systems, 27, 2014. [13] Robin Rombach, Andreas Blattmann, Dominik Lorenz, Patrick Esser, and Bjo ̈rn Ommer. High-resolution image synthesis with latent diffusion models. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition, pages 10684–10695, 2022. [14] Lvmin Zhang, Anyi Rao, and Maneesh Agrawala. Adding conditional control to text-to-image diffusion models. In Proceedings of the IEEE/CVF International Conference on Computer Vision, pages 38363847, 2023. [15] Andreas Blattmann, Tim Dockhorn, Sumith Kulal, Daniel Mendelevitch, Maciej Kilian, Dominik Lorenz, Yam Levi, Zion English, Vikram Voleti, Adam Letts, et al. Stable video diffusion: Scaling latent video diffusion models to large datasets. arXiv preprint arXiv:2311.15127, 2023.
+[16] Lucas Theis, Tim Salimans, Matthew D Hoffman, and Fabian Mentzer. Lossy compression with gaussian diffusion. arXiv preprint arXiv:2206.08889, 2022.
+[17] Noor Fathima Ghouse, Jens Petersen, Auke Wiggers, Tianlin Xu, and Guillaume Sauti`ere. A residual diffusion model for high perceptual quality codec augmentation. arXiv preprint arXiv:2301.05489, 2023. [18] Ruihan Yang and Stephan Mandt. Lossy image compression with conditional diffusion models. arXiv preprint arXiv:2209.06950, 2022. [19] Marlene Careil, Matthew J. Muckley, Jakob Verbeek, and St ́ephane Lathuili`ere. Towards image compression with perfect realism at ultralow bitrates. In The Twelfth International Conference on Learning Representations, 2024.
+[20] Zhihong Pan, Xin Zhou, and Hao Tian. Extreme generative image compression by learning text embedding from diffusion models. arXiv preprint arXiv:2211.07793, 2022.
+[21] Eric Lei, Yigit Berkay Uslu, Hamed Hassani, and Shirin Saeedi Bidokhti. Text+ sketch: Image compression at ultra low rates. In ICML 2023 Workshop Neural Compression: From Information Theory to Applications, 2023. [22] Eastman Kodak Company. Kodak lossless true color image suite. http://r0k.us/graphics/kodak/. [23] Johannes Balle ́, David Minnen, Saurabh Singh, Sung Jin Hwang, and Nick Johnston. Variational image compression with a scale hyperprior. In International Conference on Learning Representations, 2018.
+[24] Gary J Sullivan, Jens-Rainer Ohm, Woo-Jin Han, and Thomas Wiegand. Overview of the high efficiency video coding (hevc) standard. IEEE Transactions on circuits and systems for video technology, 22(12):16491668, 2012. [25] Johannes Ball ́e, Valero Laparra, and Eero P Simoncelli. End-to-end optimized image compression. In 5th International Conference on Learning Representations, ICLR 2017, 2017.
+[26] Zongyu Guo, Zhizheng Zhang, Runsen Feng, and Zhibo Chen. Causal contextual prediction for learned image compression. IEEE Transactions on Circuits and Systems for Video Technology, 32(4):2329–2341, 2021. [27] Haojie Liu, Tong Chen, Peiyao Guo, Qiu Shen, Xun Cao, Yao Wang, and Zhan Ma. Non-local attention optimized deep image compression. arXiv preprint arXiv:1904.09757, 2019.
+[28] Yueqi Xie, Ka Leong Cheng, and Qifeng Chen. Enhanced invertible encoding for learned image compression. In Proceedings of the 29th ACM international conference on multimedia, pages 162–170, 2021. [29] Yinhao Zhu, Yang Yang, and Taco Cohen. Transformer-based transform coding. In International Conference on Learning Representations, 2021. [30] David Minnen, Johannes Ball ́e, and George D Toderici. Joint autoregressive and hierarchical priors for learned image compression. Advances in neural information processing systems, 31, 2018.
+[31] Dailan He, Ziming Yang, Weikun Peng, Rui Ma, Hongwei Qin, and Yan Wang. Elic: Efficient learned image compression with unevenly grouped space-channel contextual adaptive coding. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, pages 5718–5727, 2022. [32] Yichen Qian, Xiuyu Sun, Ming Lin, Zhiyu Tan, and Rong Jin. Entroformer: A transformer-based entropy model for learned image compression. In International Conference on Learning Representations, 2021. [33] Shoma Iwai, Tomo Miyazaki, Yoshihiro Sugaya, and Shinichiro Omachi. Fidelity-controllable extreme image compression with generative ad
+
+
+12
+versarial networks. In 2020 25th International Conference on Pattern Recognition (ICPR), pages 8235–8242. IEEE, 2021. [34] Fabian Mentzer, George D Toderici, Michael Tschannen, and Eirikur Agustsson. High-fidelity generative image compression. Advances in Neural Information Processing Systems, 33:11913–11924, 2020.
+[35] Matthew J Muckley, Alaaeldin El-Nouby, Karen Ullrich, Herv ́e J ́egou, and Jakob Verbeek. Improving statistical fidelity for neural image compression with implicit local likelihood models. In International Conference on Machine Learning, pages 25426–25443. PMLR, 2023. [36] Huanjing Yue, Xiaoyan Sun, Jingyu Yang, and Feng Wu. Cloud-based image coding for mobile devices—toward thousands to one compression. IEEE transactions on multimedia, 15(4):845–857, 2013.
+[37] Fangyuan Gao, Xin Deng, Junpeng Jing, Xin Zou, and Mai Xu. Extremely low bit-rate image compression via invertible image generation. IEEE Transactions on Circuits and Systems for Video Technology, 2023. [38] Hao Wei, Chenyang Ge, Zhiyuan Li, Xin Qiao, and Pengchao Deng. Towards extreme image rescaling with generative prior and invertible prior. IEEE Transactions on Circuits and Systems for Video Technology, 2024. [39] Mengyao Li, Liquan Shen, Yufei Lin, Kun Wang, and Jinbo Chen. Extreme underwater image compression using physical priors. IEEE Transactions on Circuits and Systems for Video Technology, 33(4):19371951, 2022. [40] Xuhao Jiang, Weimin Tan, Tian Tan, Bo Yan, and Liquan Shen. Multimodality deep network for extreme learned image compression. In Proceedings of the AAAI Conference on Artificial Intelligence, volume 37, pages 1033–1041, 2023. [41] Jascha Sohl-Dickstein, Eric Weiss, Niru Maheswaranathan, and Surya Ganguli. Deep unsupervised learning using nonequilibrium thermodynamics. In International conference on machine learning, pages 22562265. PMLR, 2015. [42] Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. Advances in neural information processing systems, 33:6840–6851, 2020. [43] Chong Mou, Xintao Wang, Liangbin Xie, Jian Zhang, Zhongang Qi, Ying Shan, and Xiaohu Qie. T2i-adapter: Learning adapters to dig out more controllable ability for text-to-image diffusion models. arXiv preprint arXiv:2302.08453, 2023.
+[44] Xinqi Lin, Jingwen He, Ziyan Chen, Zhaoyang Lyu, Ben Fei, Bo Dai, Wanli Ouyang, Yu Qiao, and Chao Dong. Diffbir: Towards blind image restoration with generative diffusion prior. arXiv preprint arXiv:2308.15070, 2023.
+[45] Xintao Wang, Ke Yu, Chao Dong, and Chen Change Loy. Recovering realistic texture in image super-resolution by deep spatial feature transform. In Proceedings of the IEEE conference on computer vision and pattern recognition, pages 606–615, 2018.
+[46] Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image recognition. In Proceedings of the IEEE conference on computer vision and pattern recognition, pages 770–778, 2016. [47] Olaf Ronneberger, Philipp Fischer, and Thomas Brox. U-net: Convolutional networks for biomedical image segmentation. In Medical Image Computing and Computer-Assisted Intervention–MICCAI 2015: 18th International Conference, Munich, Germany, October 5-9, 2015, Proceedings, Part III 18, pages 234–241. Springer, 2015. [48] Nicola Asuni and Andrea Giachetti. Testimages: a large-scale archive for testing visual devices and basic image processing algorithms. In STAG, pages 63–70, 2014. [49] George Toderici, Lucas Theis, Nick Johnston, Eirikur Agustsson, Fabian Mentzer, Johannes Ball ́e, Wenzhe Shi, and Radu Timofte. Clic 2020: Challenge on learned image compression, 2020. http://www.compression.cc. [50] Yawei Li, Kai Zhang, Jingyun Liang, Jiezhang Cao, Ce Liu, Rui Gong, Yulun Zhang, Hao Tang, Yun Liu, Denis Demandolx, et al. Lsdir: A large scale dataset for image restoration. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, pages 17751787, 2023. [51] Diederik P Kingma and Jimmy Ba. Adam: A method for stochastic optimization. arXiv preprint arXiv:1412.6980, 2014.
+[52] Alexander Quinn Nichol and Prafulla Dhariwal. Improved denoising diffusion probabilistic models. In International conference on machine learning, pages 8162–8171. PMLR, 2021. [53] Richard Zhang, Phillip Isola, Alexei A Efros, Eli Shechtman, and Oliver Wang. The unreasonable effectiveness of deep features as a perceptual metric. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition, pages 586–595, 2018.
+[54] Anish Mittal, Rajiv Soundararajan, and Alan C Bovik. Making a “completely blind” image quality analyzer. IEEE Signal processing letters, 20(3):209–212, 2012. [55] Keyan Ding, Kede Ma, Shiqi Wang, and Eero P Simoncelli. Image quality assessment: Unifying structure and texture similarity. IEEE transactions on pattern analysis and machine intelligence, 44(5):25672581, 2020. [56] Martin Heusel, Hubert Ramsauer, Thomas Unterthiner, Bernhard Nessler, and Sepp Hochreiter. Gans trained by a two time-scale update rule converge to a local nash equilibrium. Advances in neural information processing systems, 30, 2017.
+[57] Mikołaj Bin ́kowski, Danica J Sutherland, Michael Arbel, and Arthur Gretton. Demystifying mmd gans. arXiv preprint arXiv:1801.01401, 2018. [58] Zhou Wang, Eero P Simoncelli, and Alan C Bovik. Multiscale structural similarity for image quality assessment. In The Thrity-Seventh Asilomar Conference on Signals, Systems & Computers, 2003, volume 2, pages 1398–1402. Ieee, 2003. [59] Gisle Bjontegaard. Calculation of average psnr differences between rdcurves. ITU SG16 Doc. VCEG-M33, 2001.
+
+
+13
+Zhiyuan Li is currently pursuing a master’s degree with the Institute of Artificial Intelligence and Robotics at Xi’an Jiaotong University. He received his bachelor’s degree from Xidian University in 2022. His research interests include image compression, image rescaling, and other visual problems.
+Yanhui Zhou received the M. S. and Ph. D. degrees in electrical engineering from the Xi’an Jiaotong University, Xi’an, China, in 2005 and 2011, respectively. She is currently an associate professor with the School of Information and telecommunication Xi’an Jiaotong University. Her current research interests include image/video compression, computer vision and deep learning.
+Hao Wei is currently a Ph.D. candidate with the Institute of Artificial Intelligence and Robotics at Xi’an Jiaotong University. He received his B.Sc. and M.Sc. degrees from Yangzhou University and Nanjing University of Science and Technology in 2018 and 2021, respectively. His research interests include image deblurring, image compression, and other low-level vision problems.
+Chenyang Ge is currently an associate professor at Xi’an Jiaotong University. He received the B.A., M.S., and Ph.D. degrees at Xi’an Jiaotong University in 1999, 2002, and 2009, respectively. His research interests include computer vision, 3D sensing, new display processing, and SoC design.
+Jingwen Jiang is currently pursuing a master’s degree at Xi’an Jiaotong University. He received his bachelor’s degree from Sichuan University in 2023. His research interests include image compression and video compression.

@@ -1,0 +1,555 @@
+Citation: Han, S.; Mo, B.; Zhao, J.; Xu,
+J.; Sun, S.; Jin, B. High-Quality Image
+Compression Algorithm Design Based
+on Unsupervised Learning. Sensors
+2024, 24, 6503. https://doi.org/
+10.3390/s24206503
+Academic Editor: Nikolaos Doulamis
+Received: 27 August 2024
+Revised: 1 October 2024
+Accepted: 7 October 2024
+Published: 10 October 2024
+Copyright: © 2024 by the authors.
+Licensee MDPI, Basel, Switzerland.
+This article is an open access article
+distributed under the terms and
+conditions of the Creative Commons
+Attribution (CC BY) license (https://
+creativecommons.org/licenses/by/
+4.0/).
+sensors
+Article
+High-Quality Image Compression Algorithm Design Based on Unsupervised Learning
+Shuo Han 1,*, Bo Mo 1, Jie Zhao 1, Junwei Xu 1, Shizun Sun 1 and Bo Jin 2
+1 School of Aerospace Engineering, Beijing Institute of Technology, Beijing100081, China; mobo@bit.edu.cn (B.M.); zhaojie@bit.edu.cn (J.Z.); 3120220104@bit.edu.cn (J.X.); 3220225009@bit.edu.cn (S.S.) 2 Chongqing Chang’an Wang Jiang Industry Group Co., Ltd., Chongqing 400023, China; jinbo@bit.edu.cn * Correspondence: 3220215010@bit.edu.cn
+Abstract: Increasingly massive image data is restricted by conditions such as information transmission and reconstruction, and it is increasingly difficult to meet the requirements of speed and integrity in the information age. To solve the urgent problems faced by massive image data in information transmission, this paper proposes a high-quality image compression algorithm based on unsupervised learning. Among them, a content-weighted autoencoder network is proposed to achieve image compression coding on the basis of a smaller bit rate to solve the entropy rate optimization problem. Binary quantizers are used for coding quantization, and importance maps are used to achieve better bit allocation. The compression rate is further controlled and optimized. A multi-scale discriminator suitable for the generative adversarial network image compression framework is designed to solve the problem that the generated compressed image is prone to blurring and distortion. Finally, through training with different weights, the distortion of each scale is minimized, so that the image compression can achieve a higher quality compression and reconstruction effect. The experimental results show that the algorithm model can save the details of the image and greatly compress the memory of the image. Its advantage is that it can expand and compress a large number of images quickly and efficiently and realize the efficient processing of image compression.
+Keywords: high-quality image compression; content-weighted autoencoder; compression ratio; multi-scale discriminator; unsupervised learning
+1. Introduction
+In the current era of intelligence, the amount of image information on the Internet is showing an exponential growth trend. The information in the network transmission and storage must satisfy two requirements: first, it must be fast and timely without delay; second, it must have low data loss and maintain the integrity of the information content [1–3]. Timely transmission of information is one of the important needs of today, and images contain more abundant and specific content and occupy a large proportion of Internet information [4,5]. Faced with the explosive development of information interaction, image information processing has become increasingly cumbersome. Under the conditions of limited network bandwidth and memory resources [6,7], the requirements for image data compression quality and efficiency are becoming increasingly high [8,9]. On the other hand, the more efficient the compression performance, in turn, can greatly promote the development of network transmission capabilities. Image compression is essentially data compression, and its purpose is to store image data in less space [10,11], thereby improving the transmission efficiency of images in the network and ensuring that the quality of compressed images is not reduced [12,13]. The existing compression methods can achieve good compression of images, but they cannot achieve both compression efficiency and compression quality when compressing a large number of images at the same time [14]. In order to better solve this problem, images can
+Sensors 2024, 24, 6503. https://doi.org/10.3390/s24206503 https://www.mdpi.com/journal/sensors
+
+
+Sensors 2024, 24, 6503 2 of 19
+be compressed in a shorter time and with a better compression rate while ensuring higher compression quality. Therefore, this paper proposes a high-quality image compression algorithm based on unsupervised learning, in which a content-weighted autoencoder, an importance map, and a binary quantizer are specially designed. At the same time, a multi-scale discriminator is designed to determine whether the generated compressed image meets the standard, as well as a composite loss function to improve the compression quality and efficiency. Finally, the network training process is redesigned for the compression algorithm to optimize the algorithm network and improve the work efficiency. The corresponding verification experiments of the algorithm and other mainstream algorithms are carried out on the open datasets Kodark24, Cityscapes, and Urban100. The results show that the compressed images generated by the proposed compression algorithm have a better compression ratio, smaller memory usage, more complete detail information, and higher efficiency. The main work of this study is as follows:
+(1) In order to preserve more detailed information of the compressed image and improve the quality of the compressed image generation, a new content-weighted autoencoder, a new importance map, and a binary quantizer are designed. In order to make a more comprehensive judgment on the authenticity and global consistency of the generated compressed image, a multi-scale discriminator is designed. (2) In order to improve the efficiency and quality of the compressed image, a composite loss function of the composite algorithm model is designed. (3) Verification experiments are carried out on multiple open datasets. The results show that the proposed algorithm has a better compression ratio and higher efficiency than the traditional algorithm and other advanced algorithms.
+2. Related Work
+Image compression algorithms can be divided into lossless compression methods and lossy compression methods according to whether the image information is lost. Lossless compression [15,16] is commonly used in the fields of medical images, fingerprint images, remote sensing images, etc. Representative algorithms include: (1) Huffman coding; (2) Run-length coding; and (3) Arithmetic coding. Image lossy coding is a compression method with a very high compression ratio [17–19]. It is most commonly used in people’s production and life, such as network images, streaming media, videos, and other scenes. Representative algorithms include: (1) Predictive coding; (2) Fractal coding; (3) Subband coding; (4) JPEG; and (5) JPEG2000. JPEG is often used for digital image compression processing. Its lossy compression method based on discrete cosine transform is simple and efficient, but easy to distort. The principle flow of JPEG image compression is shown in Figure 1.
+Sensors 2024, 24, x FOR PEER REVIEW 2 of 19
+be compressed in a shorter time and with a better compression rate while ensuring higher compression quality. Therefore, this paper proposes a high-quality image compression algorithm based on unsupervised learning, in which a content-weighted autoencoder, an importance map, and a binary quantizer are specially designed. At the same time, a multiscale discriminator is designed to determine whether the generated compressed image meets the standard, as well as a composite loss function to improve the compression quality and efficiency. Finally, the network training process is redesigned for the compression algorithm to optimize the algorithm network and improve the work efficiency. The corresponding verification experiments of the algorithm and other mainstream algorithms are carried out on the open datasets Kodark24, Cityscapes, and Urban100. The results show that the compressed images generated by the proposed compression algorithm have a better compression ratio, smaller memory usage, more complete detail information, and higher efficiency. The main work of this study is as follows:
+(1) In order to preserve more detailed information of the compressed image and improve the quality of the compressed image generation, a new content-weighted autoencoder, a new importance map, and a binary quantizer are designed. In order to make a more comprehensive judgment on the authenticity and global consistency of the generated compressed image, a multi-scale discriminator is designed. (2) In order to improve the efficiency and quality of the compressed image, a composite loss function of the composite algorithm model is designed. (3) Verification experiments are carried out on multiple open datasets. The results show that the proposed algorithm has a better compression ratio and higher efficiency than the traditional algorithm and other advanced algorithms.
+2. Related Work
+Image compression algorithms can be divided into lossless compression methods and lossy compression methods according to whether the image information is lost. Lossless compression [15,16] is commonly used in the fields of medical images, fingerprint images, remote sensing images, etc. Representative algorithms include: (1) Huffman coding; (2) Run-length coding; and (3) Arithmetic coding. Image lossy coding is a compression method with a very high compression ratio [17–19]. It is most commonly used in people’s production and life, such as network images, streaming media, videos, and other scenes. Representative algorithms include: (1) Predictive coding; (2) Fractal coding; (3) Subband coding; (4) JPEG; and (5) JPEG2000. JPEG is often used for digital image compression processing. Its lossy compression method based on discrete cosine transform is simple and efficient, but easy to distort. The principle flow of JPEG image compression is shown in Figure 1.
+Discrete Cosine Transform
+Quantification
+Color Space Conversion
+Image Blocking
+Huffman Encoding
+Input
+Image Output
+Image
+Image Data Compression
+Figure 1. JPEG image compression principal process.
+In addition, the upgraded version of JPEG, JPEG2000, is based on the discrete wavelet (DWT) multi-channel analytical image compression coding method with a higher compression ratio. Through calculation, the image signal can be divided more finely, and the high frequency and low frequency are both good. The processing effect is good, but the disadvantage is that it takes a long time and cannot process a large amount of image data in a short time. The JPEG2000 image compression coding and decoding system process is shown in Figure 2.
+Figure 1. JPEG image compression principal process.
+In addition, the upgraded version of JPEG, JPEG2000, is based on the discrete wavelet (DWT) multi-channel analytical image compression coding method with a higher compression ratio. Through calculation, the image signal can be divided more finely, and the high frequency and low frequency are both good. The processing effect is good, but the disadvantage is that it takes a long time and cannot process a large amount of image data in a short time. The JPEG2000 image compression coding and decoding system process is shown in Figure 2.
+
+
+Sensors 2024, 24, 6503 3 of 19
+Sensors 2024, 24, x FOR PEER REVIEW 3 of 19
+Input Original Image
+FDWT Quantification
+Entropy Decoding
+Inverse Quantization
+IDWT
+Preprocessing
+Postprocessing
+Output Compressed Image
+Entropy Coding Image
+encoding data stream
+tier2encoding
+tier1encoding
+Rate-distortion Control
+Bitstream Decomposition
+Figure 2. JPEG2000 image compression encoding and decoding system process.
+The encoding process of JPEG2000 requires preprocessing of the image first, in which slicing is for better slicing processing. Slicing does not require the shape and size, and each small block is encoded separately. Another part of the preprocessing canvas is to set the area of the image. Then FDWT (wavelet transform) is performed. After the wavelet is performed, subbands will be generated. Different quantization steps are used for different subbands to obtain quantization results. Then entropy coding is performed. After the entropy coding is completed, several rectangular blocks will be formed. The rectangular blocks divide the area into code blocks. The bit planes of the blocks are encoded from high to low to obtain a bit stream. After encoding all the code blocks, they are put together according to the same bit stream to form a code stream organization. After that, after decoding and quantization, IDWT transformation is performed, and finally the compressed image is output after post-processing. Different from the traditional image compression algorithm, the image compression algorithm based on deep learning has developed rapidly due to its great potential, high compression ratio, and fast decompression speed [20–23]. In particular, this type of deep learning image compression algorithm can be deployed on a low-cost hardware platform without restriction, which makes it a hot spot in the study of image compression algorithms. Zhang et al. [24] proposed a piecewise differential coding method based on structural statistical saturation, aiming to improve the usability of video while ensuring compression integrity. Agustsson et al. [25] proposed a generative compression method by optimizing the rate-distortion-realism trade-off, which can generate detailed and realistic images at low bit rates and avoid the blurry reconstruction produced by traditional rate-distortion optimization models. Bai et al. [26] proposed a unified and powerful deep lossy and residual (DLPR) coding framework suitable for lossless and near-lossless image compression. Jiang et al. [27] proposed a quantization error compensation method that can flexibly combine multiple end-to-end learning image compression techniques. Fu et al. [28] designed an efficient image-coding framework with an asymmetric structure. The encoder uses three-stage multi-scale residual blocks (MSRBs), while the decoder only uses one stage, which reduces the decoding complexity while maintaining good performance. Wang et al. [29] proposed a new framework for compressed images based on multiscale dilated convolutional neural networks for compressed sensing (CS) measurement and reconstruction, which directly obtains measurements from the trained full convolutional structure and avoids traditional block effects. Lau et al. [30] developed an SPI system based on block compressed sensing (BCS) and U-Net CNN, which provides an opportunity to pre-train deep learning models for BCS reconstruction of images in various fields. Duan et al. [31] redesigned their latent variable model and simplified quantization and entropy coding in image compression by quantizing the a priori and priori of perception. Al-khassaweneh et al. [32] designed a method based on the Frei-Chen base technique and modified run length encoding (RLE) to compress images. The goal of RLE is to improve the compression factor without adding any distortion. Yang et al. [33] proposed an end-to-end optimized lossy image compression framework, which introduces an
+Figure 2. JPEG2000 image compression encoding and decoding system process.
+The encoding process of JPEG2000 requires preprocessing of the image first, in which slicing is for better slicing processing. Slicing does not require the shape and size, and each small block is encoded separately. Another part of the preprocessing canvas is to set the area of the image. Then FDWT (wavelet transform) is performed. After the wavelet is performed, subbands will be generated. Different quantization steps are used for different subbands to obtain quantization results. Then entropy coding is performed. After the entropy coding is completed, several rectangular blocks will be formed. The rectangular blocks divide the area into code blocks. The bit planes of the blocks are encoded from high to low to obtain a bit stream. After encoding all the code blocks, they are put together according to the same bit stream to form a code stream organization. After that, after decoding and quantization, IDWT transformation is performed, and finally the compressed image is output after post-processing. Different from the traditional image compression algorithm, the image compression algorithm based on deep learning has developed rapidly due to its great potential, high compression ratio, and fast decompression speed [20–23]. In particular, this type of deep learning image compression algorithm can be deployed on a low-cost hardware platform without restriction, which makes it a hot spot in the study of image compression algorithms. Zhang et al. [24] proposed a piecewise differential coding method based on structural statistical saturation, aiming to improve the usability of video while ensuring compression integrity. Agustsson et al. [25] proposed a generative compression method by optimizing the rate-distortion-realism trade-off, which can generate detailed and realistic images at low bit rates and avoid the blurry reconstruction produced by traditional rate-distortion optimization models. Bai et al. [26] proposed a unified and powerful deep lossy and residual (DLPR) coding framework suitable for lossless and near-lossless image compression. Jiang et al. [27] proposed a quantization error compensation method that can flexibly combine multiple end-to-end learning image compression techniques. Fu et al. [28] designed an efficient image-coding framework with an asymmetric structure. The encoder uses threestage multi-scale residual blocks (MSRBs), while the decoder only uses one stage, which reduces the decoding complexity while maintaining good performance. Wang et al. [29] proposed a new framework for compressed images based on multiscale dilated convolutional neural networks for compressed sensing (CS) measurement and reconstruction, which directly obtains measurements from the trained full convolutional structure and avoids traditional block effects. Lau et al. [30] developed an SPI system based on block compressed sensing (BCS) and U-Net CNN, which provides an opportunity to pre-train deep learning models for BCS reconstruction of images in various fields. Duan et al. [31] redesigned their latent variable model and simplified quantization and entropy coding in image compression by quantizing the a priori and priori of perception. Alkhassaweneh et al. [32] designed a method based on the Frei-Chen base technique and modified run length encoding (RLE) to compress images. The goal of RLE is to improve the compression factor without adding any distortion. Yang et al. [33] proposed an end-to-end optimized lossy image compression framework, which introduces an additional “content” latent variable that is a condition for the back diffusion process and uses this variable to store information about the image.
+
+
+Sensors 2024, 24, 6503 4 of 19
+The above algorithm designs have good performance in special scenarios, but it still needs to be improved in the compression speed and compression rate, and it is difficult to face the complex and changeable timeliness and other common application scenarios due to the lack of generalization effect. At the same time, the widespread use of end-to-end smart devices urgently requires high-quality image compression algorithms with good performance and smaller memory usage.
+3. Model Establishment
+This paper studies high-quality image compression technology. The compressed images are used for fast transmission of image information and to reduce memory usage. Therefore, high requirements are placed on compression speed and image details. In the past, the image compression algorithm based on an autoencoder was designed [34,35]. Through reasonable allocation of positions, the image compression effect was significantly optimized. However, for some high resolution images, the compression did not achieve good results and still had blurring and distortion problems. The generative adversarial network has excellent image compression performance for high resolution images. Deep learning promotes the development of image compression technology, continuously improves the performance of image compression, and achieves better compression rate and better compression index. Therefore, it is very important to learn to establish a better image compression framework. Therefore, this paper re-designs the content-weighted autoencoder as the basis of image compression and deeply integrates it with the generative adversarial network to form a framework for high-quality image compression so as to achieve the maximum preservation of image information at a faster compression speed and better compression rate. The following first introduces the overall network structure of the high-quality image compression algorithm designed in this paper and then expands the key modules and the loss function used in detail. Finally, the training and use of this algorithm are explained.
+3.1. Overall Structure Design of Algorithm Network
+The network structure of the high-quality image compression algorithm designed in this paper includes the following main modules: content-weighted autoencoder, in which the decoding part is used as the generator G in the generative adversarial network to realize the function of the generator, and the compressed data output by the autoencoder can be used as the generation condition; importance map, in which Q(x) represents the importance map quantization process and M(x) represents the importance map mask calculation process; binary quantizer, which can set the activation function in the encoder and convert it with the activation function to generate the decoding result during decoding; multi-scale discriminator DM and composite loss function Lcos. The above modules together realize high-quality image compression, and the overall structure design of the algorithm network is shown in Figure 3.
+Sensors 2024, 24, x FOR PEER REVIEW 4 of 19
+additional “content” latent variable that is a condition for the back diffusion process and uses this variable to store information about the image. The above algorithm designs have good performance in special scenarios, but it still needs to be improved in the compression speed and compression rate, and it is difficult to face the complex and changeable timeliness and other common application scenarios due to the lack of generalization effect. At the same time, the widespread use of end-toend smart devices urgently requires high-quality image compression algorithms with good performance and smaller memory usage.
+3. Model Establishment
+This paper studies high-quality image compression technology. The compressed images are used for fast transmission of image information and to reduce memory usage. Therefore, high requirements are placed on compression speed and image details. In the past, the image compression algorithm based on an autoencoder was designed [34,35]. Through reasonable allocation of positions, the image compression effect was significantly optimized. However, for some high resolution images, the compression did not achieve good results and still had blurring and distortion problems. The generative adversarial network has excellent image compression performance for high resolution images. Deep learning promotes the development of image compression technology, continuously improves the performance of image compression, and achieves better compression rate and better compression index. Therefore, it is very important to learn to establish a better image compression framework. Therefore, this paper re-designs the content-weighted autoencoder as the basis of image compression and deeply integrates it with the generative adversarial network to form a framework for high-quality image compression so as to achieve the maximum preservation of image information at a faster compression speed and better compression rate. The following first introduces the overall network structure of the high-quality image compression algorithm designed in this paper and then expands the key modules and the loss function used in detail. Finally, the training and use of this algorithm are explained.
+3.1. Overall Structure Design of Algorithm Network
+The network structure of the high-quality image compression algorithm designed in this paper includes the following main modules: content-weighted autoencoder, in which the decoding part is used as the generator G in the generative adversarial network to realize the function of the generator, and the compressed data output by the autoencoder can be used as the generation condition; importance map, in which Q(x) represents the importance map quantization process and M(x) represents the importance map mask calculation process; binary quantizer, which can set the activation function in the encoder and convert it with the activation function to generate the decoding result during decoding; multi-scale discriminator DM and composite loss function Lcos. The above modules together realize high-quality image compression, and the overall structure design of the algorithm network is shown in Figure 3.
+Input image
+Important map
+Binary quantizer
+Q(x) M(x) DM
+ulti-scale discriminator
+Is DM correct ?
+Encoder Decoder
+Original image
+G
+Generator
+Fine tuning training
+Figure 3. Overall structure design of algorithm network.
+Figure 3. Overall structure design of algorithm network.
+
+
+Sensors 2024, 24, 6503 5 of 19
+3.2. Content-Weighted Autoencoder
+The content-weighted autoencoder uses convolution operation to replace the traditional fully connected mode of encoding, which can achieve image compression based on a smaller bit rate and optimize the problem with entropy rate. Its structure includes two parts: encoding and decoding. Among them, the encoding part is a structure composed of a cascade combination of convolutional layers and residual modules, including three convolutional layers and three residual blocks. Each residual block has two convolutional layers and a ReLU function. The residual module is used to improve the anti-noise performance of the encoder, and the encoder designed in this paper does not add a normalization layer to avoid visual artifacts in smooth areas. In the encoding process, the image is first input into the network, and after convolution through 64 convolution kernels Conv1 with a size of 8 × 8 and a stride of 4, it passes through a residual module Res1. Then it passes through a convolution layer of 128 convolution kernels, Conv2, with a size of 4 × 4 and a stride of 2. After that, it passes through two residual modules, Res2 and Res3, and the feature map is convolved with a 1 × 1 convolution kernel, Conv3. Except for the last layer of the encoder, which uses the Sigmoid activation function, all convolutional layers use ReLU. The encoding process is shown in Figure 4.
+Sensors 2024, 24, x FOR PEER REVIEW 5 of 19
+3.2. Content-Weighted Autoencoder
+The content-weighted autoencoder uses convolution operation to replace the traditional fully connected mode of encoding, which can achieve image compression based on a smaller bit rate and optimize the problem with entropy rate. Its structure includes two parts: encoding and decoding. Among them, the encoding part is a structure composed of a cascade combination of convolutional layers and residual modules, including three convolutional layers and three residual blocks. Each residual block has two convolutional layers and a ReLU function. The residual module is used to improve the anti-noise performance of the encoder, and the encoder designed in this paper does not add a normalization layer to avoid visual artifacts in smooth areas. In the encoding process, the image is first input into the network, and after convolution through 64 convolution kernels Conv1 with a size of 8 × 8 and a stride of 4, it passes through a residual module Res1. Then it passes through a convolution layer of 128 convolution kernels, Conv2, with a size of 4 × 4 and a stride of 2. After that, it passes through two residual modules, Res2 and Res3, and the feature map is convolved with a 1 × 1 convolution kernel, Conv3. Except for the last layer of the encoder, which uses the Sigmoid activation function, all convolutional layers use ReLU. The encoding process is shown in Figure 4.
+Figure 4. Content-weighted autoencoder encoding process.
+The encoding process is to add an activation function to the input signal
+12
+[ , , n]
+x = x x ⋅⋅⋅x and map the data of the input signal to y, where y is the new data matrix. The mathematical principle is as shown in Formula (1).
+y = f (wx+b) (1)
+In the formula, f is the activation function, w is the mapping matrix, and b is the bias term of the encoding part. The decoding part consists of an up-sampling layer and a deconvolution layer. The convolution layer is for feature extraction, and the deconvolution layer is for image reconstruction. Finally, through continuous iteration, the error between the output and the input is minimized to obtain the optimal autoencoder parameters. The feature extraction in the autoencoder is more efficient, and the parameter weights in the convolutional network are shared by neurons, so that the network complexity is easy to train the algorithm model, and the reconstruction quality of the compressed image is improved. The decoding process is to restore the extracted effective features so that the result is close to the input signal x. The mathematical principle is as shown in Formula (2).
+x f (wy b)
+′ ′′ ′
+= + (2)
+In the formula, f ′ is the mapping function, w′ is the mapping matrix, and b ′ is the bias term of the decoding part.
+3.3. Importance Map
+In the process of image compression, different regions have different compression difficulties, and smoother regions are easier to compress. However, regions with relatively rich textures are the important parts to obtain information [36,37], so bits should be allocated to parts with complex texture structures. In the process of extracting feature maps,
+Input Conv1
+Round
+Res1 Conv2
+Res3 Conv3 Res2
+Figure 4. Content-weighted autoencoder encoding process.
+The encoding process is to add an activation function to the input signal x = [x1, x2, · · ·xn] and map the data of the input signal to y, where y is the new data matrix. The mathematical principle is as shown in Formula (1).
+y = f (wx + b) (1)
+In the formula, f is the activation function, w is the mapping matrix, and b is the bias term of the encoding part. The decoding part consists of an up-sampling layer and a deconvolution layer. The convolution layer is for feature extraction, and the deconvolution layer is for image reconstruction. Finally, through continuous iteration, the error between the output and the input is minimized to obtain the optimal autoencoder parameters. The feature extraction in the autoencoder is more efficient, and the parameter weights in the convolutional network are shared by neurons, so that the network complexity is easy to train the algorithm model, and the reconstruction quality of the compressed image is improved. The decoding process is to restore the extracted effective features so that the result is close to the input signal x. The mathematical principle is as shown in Formula (2).
+x′ = f ′(w′y + b′) (2)
+In the formula, f ′ is the mapping function, w′ is the mapping matrix, and b′ is the bias term of the decoding part.
+3.3. Importance Map
+In the process of image compression, different regions have different compression difficulties, and smoother regions are easier to compress. However, regions with relatively rich textures are the important parts to obtain information [36,37], so bits should be allocated to parts with complex texture structures. In the process of extracting feature maps, different feature maps contain different information. The content-weighted importance maps can achieve better bit allocation and can control and optimize the compression rate.
+
+
+Sensors 2024, 24, 6503 6 of 19
+The importance map is obtained from the input image through learning. The intermediate feature map can be obtained from the residual block of the encoder by processing the image, and then the importance map F(x) is obtained by processing the convolution layer. The importance map extraction process is shown in Figure 5.
+Sensors 2024, 24, x FOR PEER REVIEW 6 of 19
+different feature maps contain different information. The content-weighted importance maps can achieve better bit allocation and can control and optimize the compression rate. The importance map is obtained from the input image through learning. The intermediate feature map can be obtained from the residual block of the encoder by processing
+the image, and then the importance map F(x) is obtained by processing the convolution layer. The importance map extraction process is shown in Figure 5.
+Figure 5. Importance map extraction process.
+In the network, if the input image is x, the output of the encoder is ( ) h w n
+E x R× ×
+∈,
+F(x) is used to represent the importance map of size h × w . When 1
+ij
+ll
+F
+LL
+− ≤ ≤ , en
+code and store the output information from the first to the nl
+L bit. Among them, L repre
+sents the value of the importance, and n
+L represents the bit corresponding to each im
+portance. The importance map is used to realize the allocation of bits. First, the size of the
+importance map F(x) is recorded as h × w , and the number of feature maps output by the encoder network is recorded as n. The importance map is quantized to become an
+integer less than n. Generate an importance feature mask m corresponding to B(E(x)) ,
+whose size is h × w × n . Here, fij is recorded as an element in F(x) , and the process of
+obtaining the importance map by quantization is defined as Formula (3).
+1
+( ) 1, , 1, ,
+ij ij
+ll
+Q f l if f l L
+LL
+−
+= − ≤ ≤ = ⋅⋅⋅ (3)
+After quantizing the importance map, the importance feature mask m is calculated by Formula (4).
+1 ()
+kij ij
+n
+m if k Q f
+nl
+= ≤
+ (4)
+The final encoding result of the input image x can be represented by c = M ⊗ B , where the symbol ⊗ represents element multiplication. In this way, the contentweighted importance map is obtained, which guides the generation of images with clearer textures. In the process of back propagation, the gradient still needs to be calculated. The feature map is convolved to generate the importance map. The importance feature mask is generated by the valuer, which causes the gradient of most areas to be zero. To calculate
+the gradient of the mask of the element pij in the importance map, see Formula (5).
+1 0
+kij ij
+kl
+m if Lp
+n
+= ≤
+ (5)
+3.4. Binary Quantizer
+After encoding the image, a binary quantizer is used to complete the quantization process. The activation function is the Sigmoid function, which takes values between [0, 1]. After nonlinear transformation, the value output by the encoder should also be between [0, 1]. In forward propagation, the activation value greater than 0.5 can be defined as 1, and the activation value less than 0.5 can be defined as 0, as shown in Formula (6).
+Conv
+Feature
+map Round
+Importance map
+Figure 5. Importance map extraction process.
+In the network, if the input image is x, the output of the encoder is E(x) ∈ Rh×w×n, F(x) is used to represent the importance map of size h × w. When l−L1 ≤ Fij ≤ l
+L , encode
+and store the output information from the first to the nl
+L bit. Among them, L represents the
+value of the importance, and n
+L represents the bit corresponding to each importance. The importance map is used to realize the allocation of bits. First, the size of the importance map F(x) is recorded as h × w, and the number of feature maps output by the encoder network is recorded as n. The importance map is quantized to become an integer less than n. Generate an importance feature mask m corresponding to B(E(x)), whose size is h × w × n. Here, fij is recorded as an element in F(x), and the process of obtaining the importance map by quantization is defined as Formula (3).
+Q( fij) = l − 1, i f l − 1
+L ≤ fij ≤ l
+L , l = 1, · · ·, L (3)
+After quantizing the importance map, the importance feature mask m is calculated by Formula (4).
+mkij = 1
+n if k ≤ n
+l Q( fij) (4)
+The final encoding result of the input image x can be represented by c = M ⊗ B, where the symbol ⊗ represents element multiplication. In this way, the content-weighted importance map is obtained, which guides the generation of images with clearer textures. In the process of back propagation, the gradient still needs to be calculated. The feature map is convolved to generate the importance map. The importance feature mask is generated by the valuer, which causes the gradient of most areas to be zero. To calculate the gradient of the mask of the element pij in the importance map, see Formula (5).
+mkij = 1
+0 i f kl
+n ≤ Lpij (5)
+3.4. Binary Quantizer
+After encoding the image, a binary quantizer is used to complete the quantization process. The activation function is the Sigmoid function, which takes values between [0, 1]. After nonlinear transformation, the value output by the encoder should also be between [0, 1]. In forward propagation, the activation value greater than 0.5 can be defined as 1, and the activation value less than 0.5 can be defined as 0, as shown in Formula (6).
+B(eij) = l, i f 1
+2 < eij < l + 1
+2 , l = 0, 1 (6)
+In back propagation, the gradient is calculated by the chain rule, which will cause the gradient to be almost equal to 0 everywhere during back propagation. In order to solve this problem of gradient descent in back propagation, this paper designs a gradient back propagation function, which is shown in Formula (7).
+Be(x) = x, 0 < x < 1 (7)
+
+
+Sensors 2024, 24, 6503 7 of 19
+3.5. Multi-Scale Discriminator
+The discriminator is the core of the generative adversarial network. Through adversarial training with the generator, the ability to distinguish the authenticity of the generated image is improved [38,39]. In order to obtain better compression and visual effects, a relatively large receptive field is required. To achieve this goal, a large convolution kernel or a more complex network is required, which will lead to overfitting, so a better convolutional network system needs to be introduced. The multi-scale discriminator can collect feature data at each scale, obtain a better global view and more accurate detail information, and fuse the data at each level through the multi-scale discriminator so that the compressed image generated is as close to the original image as possible. When the image data generated by the content-weighted autoencoder is input into the multi-scale discriminator, the pooling layer will down-sample the input data at different scales to obtain images of three different resolutions and then use three discriminator networks to process the images of the three different scales. Among them, the low-resolution discriminator can obtain a larger field of view when training, and the high-resolution discriminator can minimize image distortion when training, and the generated compressed image texture is clearer. The network structure of the multi-scale discriminator is shown in Figure 6.
+In back propagation, the gradient is calculated by the chain rule, which will cause the gradient to be almost equal to 0 everywhere during back propagation. In order to solve this problem of gradient descent in back propagation, this paper designs a gradient back propagation function, which is shown in Formula (7).
+B(x) = x, 0 < x <1 (7)
+3.5. Multi-Scale Discriminator
+The discriminator is the core of the generative adversarial network. Through adversarial training with the generator, the ability to distinguish the authenticity of the generated image is improved [38,39]. In order to obtain better compression and visual effects, a relatively large receptive field is required. To achieve this goal, a large convolution kernel or a more complex network is required, which will lead to overfitting, so a better convolutional network system needs to be introduced. The multi-scale discriminator can collect feature data at each scale, obtain a better global view and more accurate detail information, and fuse the data at each level through the multi-scale discriminator so that the compressed image generated is as close to the original image as possible. When the image data generated by the content-weighted autoencoder is input into the multi-scale discriminator, the pooling layer will down-sample the input data at different scales to obtain images of three different resolutions and then use three discriminator networks to process the images of the three different scales. Among them, the low-resolution discriminator can obtain a larger field of view when training, and the high-resolution discriminator can minimize image distortion when training, and the generated compressed image texture is clearer. The network structure of the multi-scale discriminator is shown in Figure 6.
+Avg Pool K 3×3 s=2
+Avg Pool K 3×3 s=2
+Ture/Fake
+Input
+S
+Conv
+BN
+Leaky-ReLU
+Conv
+BN
+Leaky-ReLU
+Conv
+BN
+Leaky-ReLU
+Conv
+Conv
+Leaky-ReLU
+S
+Conv
+BN
+Leaky-ReLU
+Conv
+BN
+Leaky-ReLU
+Conv
+BN
+Leaky-ReLU
+Conv
+Conv
+Leaky-ReLU
+S
+Conv
+BN
+Leaky-ReLU
+Conv
+BN
+Leaky-ReLU
+Conv
+BN
+Leaky-ReLU
+Conv
+Conv
+Leaky-ReLU
+2×
+4×
+Down-sampling
+Down-sampling
+Figure 6. Multi-scale discriminator network structure.
+The multi-scale discriminator aims to improve its discriminative ability by training the generated compressed images and the original images. As shown in Figure 6, the three discriminator submodules at different scales in the multi-scale discriminator network structure have the same network structure, which consists of two convolutional layers, three convolutional block layers, and a Sigmoid function. Each convolutional block structure consists of a conv, a BN layer, and a Leaky-Relu. The number of convolutional layer
+Figure 6. Multi-scale discriminator network structure.
+The multi-scale discriminator aims to improve its discriminative ability by training the generated compressed images and the original images. As shown in Figure 6, the three discriminator submodules at different scales in the multi-scale discriminator network structure have the same network structure, which consists of two convolutional layers, three convolutional block layers, and a Sigmoid function. Each convolutional block structure consists of a conv, a BN layer, and a Leaky-Relu. The number of convolutional layer operations increases successively. The first layer n = 128, the second layer n = 256, and the third layer n = 512. In the discriminator structure, the convolution kernels in all convolutional networks are 4 × 4, the stride in the first convolutional layer and the convolutional block is 2, and the stride of the last convolutional layer is 1. The specific working principle of the multi-scale discriminator is as follows: 1. Down-sampling processing: First, the image generated by the generator and the original image are subjected to twice and four times down-sampling, respectively, to generate images of three different sizes. The diversity of these scales helps to capture features at different levels. 2. Convolution processing: Then, the images of these three scales are respectively input into the submodules of the discriminator network for convolution processing to extract more detailed feature informa
+
+
+Sensors 2024, 24, 6503 8 of 19
+tion. 3. Fusion and judgment: Finally, the multi-scale discriminator adopts parallel add operation fusion for images of various scales, which helps to improve the detection ability of the discriminator network for features of different scales. After fusion, these images are detected and comprehensively judged, and if the output result is ‘True’, it is validly generated; if the output result is ‘Fake’, it is invalidly generated.
+3.6. Composite Loss Function
+The image compression design based on unsupervised learning introduces adversarial networks into the end-to-end framework for generative image compression, so the loss function consists of content-weighted autoencoder loss function, decoder loss function, feature matching loss function, and multi-scale discriminator loss function. In the process of image data compression and reconstruction by a content-weighted autoencoder, errors will be generated between input data and reconstructed data; that is, data volume will be lost. To achieve better learning and extraction of image data features, it is necessary to constantly adjust the distortion and bit rate of image reconstruction. The rate-distortion function is optimized and used as its loss function, as shown in Formula (8).
+LC = LD + αLR (8)
+In the formula, LD represents the rate-distortion loss, α is the weight used to adjust the bit rate, LR and is the rate loss. The rate-distortion loss is expressed using the L2 norm square, as shown in Formula (9).
+LD = x′n − xn 2
+2 (9)
+In the formula, x′n represents the reconstructed image, xn represents the input image. In the network structure of the autoencoder, the rate loss is defined as the entropy of the intermediate feature map, and the encoder hidden space data stored is related to the degree of concentration of the quantized data, so the entropy of the intermediate data is selected to define LR, see Formula (10).
+LR = −E log2 Pq (10)
+In the formula, Pq = R x+ 1
+2
+x− 1
+2
+Pd, Pd represents the probability density function of the
+original data. Therefore, the content-weighted autoencoder loss function can be expressed as Formula (11).
+LC = x′n − xn 2
+2 + α −E log2 Pq (11)
+The decoder is a generator in the generative antagonism network, which needs to allocate bits in the process of image compression. The rate-distortion function can optimize the balance between the reconstruction function and the bit rate. The rate-distortion function formula is (12).
+Ld + βR = Ld + βH(w⌢) (12)
+The loss function of the optimized generator is Formula (13).
+LG = Ex∼px
+h
+λR + d(x, ⌢x ) − βlb(D(⌢x , y))
+i
+(13)
+In the formula, d(x, ⌢x ) is the loss, λ and β are weight parameters.
+
+
+Sensors 2024, 24, 6503 9 of 19
+The feature matching loss is represented by MAE (mean absolute error) here, which is less susceptible to outliers than MSE (mean square error), as shown in Formula (14).
+LFM = E
+L1
+∑
+i=1
+1
+Ni
+h
+FiD(x) − FiD(G(z))
+i
+(14)
+The loss function of the multi-scale discriminator is defined in Formula (15).
+LM = E⌢x ∼pg
+h
+D(⌢x )
+i
+− Ex∼pr [D(x)] + λE⌢x ∼p⌢x
+( ∇⌢x D(⌢x ) 2 − 1)2 (15)
+Therefore, the above loss functions together constitute a composite loss function, which can effectively improve the quality and effect of image compression generation from many aspects. The composite loss function is defined as Formula (16).
+Lcom = ρLC + φLG + φLFM + ψLM (16)
+In the formula, ρ, φ, φ and ψ, are weight parameters. According to the experimental platform environment, the weight parameters are continuously adjusted through experiments to achieve the best image compression effect. The weight parameters selected in this paper are 0.5, 0.5, 5, and 3, respectively.
+3.7. Algorithm Training Process
+The specific process of algorithm training is as follows: Step 1: Use the paired original image and input image as training data, and send the input image to the generator after passing through the encoder, binary quantizer, and importance map calculation to generate a compressed image; Step 2: Send the generated compressed image and the original image to the multi-scale discriminator DM, and the multi-scale discriminator DM will discriminate the two and judge whether the result has achieved the compression effect. If it reaches the standard, it will output the compressed image. If it does not reach the standard, it will continue to return the reconstructed image until a usable compressed image is generated. According to the results, the multi-scale discriminator loss, decoder loss, and content-weighted loss are calculated; Step 3: Compare the generated compressed image with the original image, and calculate the feature matching loss; Step 4: Back propagate, according to the losses calculated in steps 2 and 3 above, and update the multi-scale discriminator DM and generator G parameters, respectively; Step 5: Execute steps 1 to 4, where the input image is given as x in the encoder, and the encoder output is obtained by analyzing and transforming the input signal, which is recorded as E(x) ∈ Rh×w×n. Here h × w is the size, and n represents the number of feature maps. The obtained is quantized by the valuer. Based on the characteristics of the binary valuer, the part of the output data greater than 0.5 is marked as 1, and the rest is marked as 0. The feature map in the encoder is extracted, and the network convolution operation is performed separately to obtain the importance map, which is recorded as F(x). Similarly, the quantization operation is carried out on F(x), and the importance mask of the same size is generated after the quantization process as that after E(x) quantization. The obtained importance mask is combined with the binary code generated by the valuer output of the encoder so that the image can better preserve important information, and finally an image compression code is obtained. The decoder is symmetrical with the encoder structure, and the same analysis and transformation are performed to obtain the output result of the decoder and generate a compressed image. When the parameters of DM are updated, the discrimination of effective generation compression can be close to 1, and the discrimination of invalid generation compression can be close to 0, that is, the multi-scale discriminator DM is maximized and optimized. During the training of the generative network, the generator
+
+
+Sensors 2024, 24, 6503 10 of 19
+G is connected in series with the multi-scale discriminator DM, and the error generated is passed to the generative network. At this time, the parameters of the generative network need to be minimized, that is, the generator G is minimized and optimized. In this process, the generator G and the multi-scale discriminator DM form a dynamic game, and the loop is jumped out after reaching the Nash equilibrium. The generated compressed image is judged to be infinitely close to the real original image. Step 6: Finally, adjust the parameters of each step according to specific needs, and the algorithm network outputs a usable, high-quality compressed image.
+4. Verification and Analysis 4.1. Experimental Platform
+The experimental verification of the algorithm in this paper requires a good experimental platform as a basic condition, mainly including key devices such as CPU, GPU, RAM, and programming framework. The specific parameters are shown in Table 1.
+Table 1. Experimental basic environment configuration.
+Name Parameter Details
+CPU Intel i7 13700F (US, CA) GPU Nvidia RTX 3060Ti 8 GB (US, CA) RAM 32 GB (CN, TW) Operating system Windows 10 (US, WA) Compilation tool Pycharm 2021.3.3 (CZ, Prague) Program framework Tensorflow-2.11.0 (US, CA)
+4.2. Evaluation Indicators of Compressed Images
+Whether the image compression is excellent and whether it can maintain a good compression effect while retaining image information to the greatest extent requires scientific and objective evaluation indicators to compare and analyze the algorithm in this paper with other image compression algorithms. The objective evaluation indicators used in this algorithm include peak signal-to-noise ratio (PSNR), multi-scale structural similarity (MS-SSIM), and compression ratio BPP.
+(1) PSNR
+PSNR is an important indicator commonly used to measure the quality of image or video generation or compression [40]. The comparison between the compressed image and the original image is generally to compare the pixels in each part of the image. PSNR can intuitively represent the pixel difference between the original image and the reconstructed image. The larger its value, the smaller the image distortion, that is, the better the image quality, as shown in Formula (17).
+PSNR = 20· log10
+MAX(x)
+√MSE (17)
+In the formula, MAX(x) represents the maximum value of the pixel grayscale in image x. The mean square error (MSE) can directly reflect the accuracy loss of the original image and the reconstructed image [41]. The mathematical principle is to take the square average of the difference between the original image and the reconstructed image. The sizes of images x and x′ are both m × n, x(i, j) is the grayscale value of the pixel at position (i, j), and x′(i, j) is the gray value of the pixel after compression. The mathematical expression of MSE is shown in Formula (18).
+MSE = 1
+mn
+m−1
+∑
+i=0
+n−1
+∑
+j=0
+x(i, j) − x′(i, j)
+2
+(18)
+
+
+Sensors 2024, 24, 6503 11 of 19
+(2) MS-SSIM
+MS-SSIM is an important indicator for evaluating the quality of image compression [42]. It is obtained by multi-scale calculation of SSIM. The purpose is to reduce the impact of different image resolutions on the performance of the compression algorithm. The resolution of the original image is denoted as Scale1, and the resolution of the image after M − 1 iterations is denoted as ScaleM. The contrast measure structure measure in SSIM is calculated at each iterative scale, and the brightness measure is only calculated at the last scale, ScaleM. By synthesizing the results of measurements at different scales, the comprehensive index MS-SSIM is obtained as shown in Formula (19).
+MS − SSIM(x, x′) = l(x, x′) αM·
+M
+∏
+j=1
+c(x, x′)
+βj
+· s(x, x′) γj (19)
+In the formula, αM, βj and γj are used to adjust the relative importance of different components. The value range of MS-SSIM is between 0 and 1. The closer the value is to 1, the higher the similarity between the reconstructed image and the original image, and the better the image quality.
+(3) BPP
+In this paper, BPP is used to measure the size of image compression, and the purpose of compression is that the smaller the BPP, the better [43]. The essence of BPP is the average bit required for each pixel at each position of the image during the compression encoding process. Its mathematical expression is shown in Formula (20).
+BPP = pn′
+pn (20)
+In the formula, the number of original pixels is pn, and the number of compressed pixels is pn′.
+4.3. Dataset Preparation and Training Strategy
+In order to better train the high-quality image compression algorithm designed in this paper, the ImageNet training dataset is selected. At the same time, in order to objectively verify the superiority of the algorithm in this paper compared with other algorithms, data sets containing different scenes and different topics and data sets with rich texture information are selected as validation data sets. The specific information of the dataset used in the experiment is shown in the following Table 2.
+Table 2. Details of the experimental dataset.
+Classification Dataset Number of Images Features
+Training set ImageNet 14,197,122 Large number, high resolution,
+contains more irrelevant noise
+Validation set
+Kodak24 24 24 image compression scenes of
+different types and difficulties
+Cityscapes 5000 Professional images of urban
+environments
+Urban100 100
+Contains challenging urban scenery with details in different frequency bands
+The algorithm model in this paper uses an RTX 3060Ti GPU for network training. The program is written based on the Tensorflow-2.11.0 deep learning framework, and the CPU model is i7-13700F. The batch size is set to 2, and the Adam optimizer is used for training
+
+
+Sensors 2024, 24, 6503 12 of 19
+optimization. The network convergence speed is optimized by momentum and adaptive learning rate. The parameters are set to β1 = 0.5, β2 = 0.99, and ε = 0.5. The initial learning rate is set to 0.0003, which is reduced to 0.0001 after training 100 epochs, and a total of 300 epochs are trained.
+4.4. Verification of Image Compression Effect on Kodak Dataset
+The specific performance of the high-quality image compression algorithm in this paper needs to be verified on the available test set. The following first selects the images of the Kodak24 dataset to demonstrate the visual compression effect and uses the objective evaluation indicators BPP, PSNR, and MS-SSIM described in Section 4.2 to measure it. Figure 7 shows two sets of comparative experiments, comparing the effects of the compression algorithm in this paper with other advanced compression methods. The sequence from left to right is: uncompressed original image, JPEG2000 compression results, compression results of algorithms in references [27,28], and compression results of the proposed algorithm in this paper. In the compression visualization results, we use red boxes to mark and enlarge the details to compare the compression effects of each algorithm.
+CPU model is i7-13700F. The batch size is set to 2, and the Adam optimizer is used for training optimization. The network convergence speed is optimized by momentum and adaptive learning rate. The parameters are set to β1 = 0.5, β2 = 0.99, and ε = 0.5. The initial learning rate is set to 0.0003, which is reduced to 0.0001 after training 100 epochs, and a total of 300 epochs are trained.
+4.4. Verification of Image Compression Effect on Kodak Dataset
+The specific performance of the high-quality image compression algorithm in this paper needs to be verified on the available test set. The following first selects the images of the Kodak24 dataset to demonstrate the visual compression effect and uses the objective evaluation indicators BPP, PSNR, and MS-SSIM described in Section 4.2 to measure it. Figure 7 shows two sets of comparative experiments, comparing the effects of the compression algorithm in this paper with other advanced compression methods. The sequence from left to right is: uncompressed original image, JPEG2000 compression results, compression results of algorithms in references [27,28], and compression results of the proposed algorithm in this paper. In the compression visualization results, we use red boxes to mark and enlarge the details to compare the compression effects of each algorithm. In the first group of experiments, our algorithm is 31.58% lower than the JPEG2000 algorithm in BPP, 6.48% higher in PSNR, and 5.13% higher in MS-SSIM. Compared with the advanced algorithm in the reference [27], our algorithm has reduced the BPP index by 27.27%, significantly improved the PSNR index by 15.29%, and improved the MS-SSIM index by 7.66%.
+Original Image (BPP,PSNR,MS-SSIM)
+JPEG2000 (0.262, 22.57, 0.903)
+Fu-2023 (0.231, 23.62, 0.907 )
+Ours (0.183, 24.38, 0.958)
+Original Image (BPP,PSNR,MS-SSIM)
+JPEG2000 (0.152, 26.7, 0.896)
+Jiang-2023 (0.143, 24.66, 0.875 )
+Ours (0.104, 28.43, 0.942)
+Figure 7. Compression effect of sample images on Kodak24 dataset. Jiang-2023 is the algorithm proposed in reference [27]. Fu-2023 is the algorithm proposed in reference [28].
+Figure 7. Compression effect of sample images on Kodak24 dataset. Jiang-2023 is the algorithm proposed in reference [27]. Fu-2023 is the algorithm proposed in reference [28].
+In the first group of experiments, our algorithm is 31.58% lower than the JPEG2000 algorithm in BPP, 6.48% higher in PSNR, and 5.13% higher in MS-SSIM. Compared with the advanced algorithm in the reference [27], our algorithm has reduced the BPP index by 27.27%, significantly improved the PSNR index by 15.29%, and improved the MS-SSIM index by 7.66%. In the second group of experiments, our algorithm has reduced the BPP index by 30.15%, improved the PSNR index by 8.01%, and improved the MS-SSIM index by 6.09% compared with the JPEG2000 algorithm. Compared with the advanced algorithm in the reference [28], our algorithm has reduced the BPP index by 20.78%, improved the PSNR index by 3.22%, and improved the MS-SSIM index by 5.62%. The experimental results show that the visualization effect shows that the traditional image compression algorithm JPEG2000 will have visual artifacts such as blur, and other algorithms will have distortion in some samples. The image compression network designed in this paper can better preserve the feature information of the image, and at the same time, the texture details are not seriously lost. The results show that our algorithm has good compression performance and compression effect.
+
+
+Sensors 2024, 24, 6503 13 of 19
+4.5. Image Compression Effect Verification on Cityscapes Dataset
+In order to verify that the high-quality image compression algorithm in this paper has good generalization ability, different test sets are selected for necessary verification. Therefore, images of the Cityscapes dataset are selected to show the visual compression effect, and the above objective evaluation indicators BPP, PSNR, and MS-SSIM are used to measure it. Figure 8 shows the comparison of the compression algorithm in this paper with other mainstream compression methods. The arrangement order from left to right is uncompressed original image, JPEG2000 compression result, compression results of the algorithm in reference [29], and compression results of the proposed algorithm in this paper. In the compression visualization results, we use red boxes to mark and enlarge the details to compare the compression effects of each algorithm.
+The experimental results show that the visualization effect shows that the traditional image compression algorithm JPEG2000 will have visual artifacts such as blur, and other algorithms will have distortion in some samples. The image compression network designed in this paper can better preserve the feature information of the image, and at the same time, the texture details are not seriously lost. The results show that our algorithm has good compression performance and compression effect.
+4.5. Image Compression Effect Verification on Cityscapes Dataset
+In order to verify that the high-quality image compression algorithm in this paper has good generalization ability, different test sets are selected for necessary verification. Therefore, images of the Cityscapes dataset are selected to show the visual compression effect, and the above objective evaluation indicators BPP, PSNR, and MS-SSIM are used to measure it. Figure 8 shows the comparison of the compression algorithm in this paper with other mainstream compression methods. The arrangement order from left to right is uncompressed original image, JPEG2000 compression result, compression results of the algorithm in reference [29], and compression results of the proposed algorithm in this paper. In the compression visualization results, we use red boxes to mark and enlarge the details to compare the compression effects of each algorithm.
+Original Image (BPP,PSNR,MS-SSIM)
+JPEG2000 (0.082, 24.74, 0.893)
+Wang-2023 (0.065, 24.92, 0.901 )
+Ours (0.045, 26.31, 0.937)
+Figure 8. Compression effect of sample images on Cityscapes dataset. Wang-2023 is the algorithm proposed in reference [29].
+The objective indicators of this group of experiments show that our algorithm is 45.12% lower than the JPEG2000 algorithm in BPP, 6.35% higher in PSNR, and 4.93% higher in MS-SSIM. Our algorithm is 30.77% lower than the advanced algorithm in reference [29] in BPP, 5.58% higher in PSNR, and 3.99% higher in MS-SSIM. The experimental results show that from the perspective of visual image effects, JPEG2000 is not much different from the reference [29], and the overall effect is good, but the details still need to be improved, and there are some blurring phenomena on small objects in the distance. The algorithm in this paper has a good processing of detail blur artifacts and can achieve a clearer effect close to the original image, whether it is the shadow in the image or the outline of the person, and the comprehensive performance of objective indicators is far better than other mainstream algorithms.
+4.6. Verification of Visual Results of Image Compression Reconstruction on Urban100 Dataset
+In order to verify that the image compressed by the proposed algorithm has a good reconstruction effect, the Urban100 data set was tested during the end-to-end training process, and the visualization results of four groups of comparison experiments were obtained, as shown in Figure 9. Its arrangement sequence from left to right is uncompressed original image, JPEG2000 compression reconstruction results, compression reconstruction results of advanced algorithms in references [30–33], and compression results of the
+Figure 8. Compression effect of sample images on Cityscapes dataset. Wang-2023 is the algorithm proposed in reference [29].
+The objective indicators of this group of experiments show that our algorithm is 45.12% lower than the JPEG2000 algorithm in BPP, 6.35% higher in PSNR, and 4.93% higher in MS-SSIM. Our algorithm is 30.77% lower than the advanced algorithm in reference [29] in BPP, 5.58% higher in PSNR, and 3.99% higher in MS-SSIM. The experimental results show that from the perspective of visual image effects, JPEG2000 is not much different from the reference [29], and the overall effect is good, but the details still need to be improved, and there are some blurring phenomena on small objects in the distance. The algorithm in this paper has a good processing of detail blur artifacts and can achieve a clearer effect close to the original image, whether it is the shadow in the image or the outline of the person, and the comprehensive performance of objective indicators is far better than other mainstream algorithms.
+4.6. Verification of Visual Results of Image Compression Reconstruction on Urban100 Dataset
+In order to verify that the image compressed by the proposed algorithm has a good reconstruction effect, the Urban100 data set was tested during the end-to-end training process, and the visualization results of four groups of comparison experiments were obtained, as shown in Figure 9. Its arrangement sequence from left to right is uncompressed original image, JPEG2000 compression reconstruction results, compression reconstruction results of advanced algorithms in references [30–33], and compression results of the proposed algorithm in this paper. In the compression visualization results, we use red boxes to mark and enlarge the details to compare the compression effects of each algorithm. In the first group of experiments, our algorithm reduced the BPP index by 30.95% compared with the JPEG2000 algorithm, improved the PSNR index by 10.61%, and improved the MS-SSIM index by 5.36%. Our algorithm reduced the BPP index by 17.14% compared with the advanced algorithm in the reference [30], improved the PSNR index by 9.41%, and improved the MS-SSIM index by 4.45%. In the second group of experiments, our algorithm reduced the BPP index by 31.98% compared with the JPEG2000 algorithm, improved the PSNR index by 16.97%, and improved the MS-SSIM index by 5.45%. Our algorithm reduced the BPP index by 21.12% compared with the advanced algorithm in the reference [31], improved the PSNR index by 10.06%, and improved the MS-SSIM index by 7.12%.
+
+
+Sensors 2024, 24, 6503 14 of 19
+Sensors 2024, 24, x FOR PEER REVIEW 14 of 19
+proposed algorithm in this paper. In the compression visualization results, we use red boxes to mark and enlarge the details to compare the compression effects of each algorithm.
+Original Image (BPP,PSNR,MS-SSIM)
+JPEG2000 (0.582, 31.42, 0.956)
+Yang-2024 (0.473, 33.94, 0.961)
+Ours (0.426, 35.73, 0.979)
+Original Image (BPP,PSNR,MS-SSIM)
+JPEG2000 (0.376, 24.88, 0.831)
+Al-khassaweneh-2024 (0.325, 26.93, 0.934 )
+Ours (0.259, 30.36, 0.958)
+Original Image (BPP,PSNR,MS-SSIM)
+JPEG2000 (0.247, 26.92, 0.898)
+Duan-2023 (0.213, 28.61, 0.884 )
+Ours (0.168, 31.49, 0.947)
+Original Image (BPP,PSNR,MS-SSIM)
+JPEG2000 (0.294, 25.63, 0.913)
+Lau-2023 (0.245, 25.91, 0.921 )
+Ours (0.203, 28.35, 0.962)
+Figure 9. Performance of sample image compression and reconstruction on the Urban100 dataset. Lau-2023 is the algorithm proposed in reference [30]. Duan-2023 is an algorithm proposed in reference [31]. Al-khassaweneh-2024 is the algorithm proposed in reference [32]. Yang-2024 is the algorithm proposed in reference [33].
+In the first group of experiments, our algorithm reduced the BPP index by 30.95% compared with the JPEG2000 algorithm, improved the PSNR index by 10.61%, and improved the MS-SSIM index by 5.36%. Our algorithm reduced the BPP index by 17.14% compared with the advanced algorithm in the reference [30], improved the PSNR index by 9.41%, and improved the MS-SSIM index by 4.45%. In the second group of experiments, our algorithm reduced the BPP index by 31.98% compared with the JPEG2000 algorithm, improved the PSNR index by 16.97%, and improved the MS-SSIM index by 5.45%. Our algorithm reduced the BPP index by 21.12% compared with the advanced algorithm in the reference [31], improved the PSNR index by 10.06%, and improved the MS-SSIM index by 7.12%. In the third group of experiments, our algorithm reduces the BPP index by 31.11% compared with the JPEG2000 algorithm, improves the PSNR index by 22.02%, and improves the MS-SSIM index by 15.28%. Our algorithm reduces the BPP index by 20.30% compared with the advanced algorithm in the reference [32], improves the PSNR index by 12.73%, and improves the MS-SSIM index by 2.56%. In the fourth group of experiments, our algorithm reduces the BPP index by 26.8% compared with the JPEG2000 algorithm, improves the PSNR index by 13.71%, and improves the MS-SSIM index by 2.19%. Our algorithm reduces the BPP index by 9.93% compared with the advanced algorithm in the reference [33], improves the PSNR index by 5.27%, and improves the MS-SSIM index by 1.87%.
+Figure 9. Performance of sample image compression and reconstruction on the Urban100 dataset. Lau-2023 is the algorithm proposed in reference [30]. Duan-2023 is an algorithm proposed in reference [31]. Al-khassaweneh-2024 is the algorithm proposed in reference [32]. Yang-2024 is the algorithm proposed in reference [33].
+In the third group of experiments, our algorithm reduces the BPP index by 31.11% compared with the JPEG2000 algorithm, improves the PSNR index by 22.02%, and improves the MS-SSIM index by 15.28%. Our algorithm reduces the BPP index by 20.30% compared with the advanced algorithm in the reference [32], improves the PSNR index by 12.73%, and improves the MS-SSIM index by 2.56%. In the fourth group of experiments, our algorithm reduces the BPP index by 26.8% compared with the JPEG2000 algorithm, improves the PSNR index by 13.71%, and improves the MS-SSIM index by 2.19%. Our algorithm reduces the BPP index by 9.93% compared with the advanced algorithm in the reference [33], improves the PSNR index by 5.27%, and improves the MS-SSIM index by 1.87%. Experimental results show that the images compressed and reconstructed by the algorithm in this paper on the Urban100 dataset perfectly restore the visual effects of the original images. For example, in the first group of experiments, the boundary between the building edge and the window of the compressed and reconstructed image by our algorithm was restored very clearly, and there was no splitting phenomenon. In the second group of experiments, our algorithm compressed the clouds and architectural edges in the reconstructed images, and the color and exposure were clearly restored, and there was no fuzzy distortion problem. In the third group of experiments, our algorithm compresses the edge of the leaves and the light reflected by the glass in the reconstructed images and has satisfactory reconstruction effects, and some of the image details prone to blur artifacts, such as overlapping leaves and shaded parts of trees and houses, are well handled. In the fourth group of experiments, the light and dark textures of the yellow buildings in
+
+
+Sensors 2024, 24, 6503 15 of 19
+the compressed reconstructed images were well restored by our algorithm, and the edge between the clouds and the buildings did not appear blurred.
+4.7. Algorithm Performance Evaluation
+In order to objectively evaluate the performance of the proposed algorithm network, a visual comparison of BPP, PSNR, and MS-SSIM indicators is performed on the above experimental platform with the traditional image compression method JPEG2000 and the advanced algorithms proposed in the references [27–33]. The above image compression algorithms are all tested on the dataset prepared in this paper. The performance curves of the BPP, PSNR, and MS-SSIM indicators of each image compression algorithm are shown in Figure 10.
+group of experiments, our algorithm compressed the clouds and architectural edges in the reconstructed images, and the color and exposure were clearly restored, and there was no fuzzy distortion problem. In the third group of experiments, our algorithm compresses the edge of the leaves and the light reflected by the glass in the reconstructed images and has satisfactory reconstruction effects, and some of the image details prone to blur artifacts, such as overlapping leaves and shaded parts of trees and houses, are well handled. In the fourth group of experiments, the light and dark textures of the yellow buildings in the compressed reconstructed images were well restored by our algorithm, and the edge between the clouds and the buildings did not appear blurred.
+4.7. Algorithm Performance Evaluation
+In order to objectively evaluate the performance of the proposed algorithm network, a visual comparison of BPP, PSNR, and MS-SSIM indicators is performed on the above experimental platform with the traditional image compression method JPEG2000 and the advanced algorithms proposed in the references [27–33]. The above image compression algorithms are all tested on the dataset prepared in this paper. The performance curves of the BPP, PSNR, and MS-SSIM indicators of each image compression algorithm are shown in Figure 10.
+0 0.2 0.4 0.6 0.8 1
+23
+25
+27
+29
+31
+33
+35
+37
+39
+BPP
+PSNR
+JPEG2000 Jiang-2023 Fu-2023 Wang-2023 Lau-2023 Duan-2023 Al-khassaweneh-2024 Yang-2024 Ours
+MS-SSIM
+0.99
+0.97
+0.95
+0.93
+0.91
+0.89
+0.87
+0.85 0 0.2 0.4 0.6 0.8 1 BPP
+JPEG2000 Jiang-2023 Fu-2023 Wang-2023 Lau-2023 Duan-2023 Al-khassaweneh-2024 Yang-2024 Ours
+Figure 10. PSNR and MS-SSIM performance test curves of each algorithm. Jiang-2023 is the algorithm proposed in reference [27]. Fu-2023 is the algorithm proposed in reference [28]. Wang-2023 is the algorithm proposed in reference [29]. Lau-2023 is the algorithm proposed in reference [30]. Duan-2023 is an algorithm proposed in reference [31]. Al-khassaweneh-2024 is the algorithm proposed in reference [32]. Yang-2024 is the algorithm proposed in reference [33].
+As can be seen from Figure 10, when evaluated by the PSNR indicator, our algorithm shows a relatively stable overall performance. When the BPP is low, it has a more obvious advantage over traditional algorithms and other advanced algorithms, and it still maintains a leading position when the BPP is high. When evaluated by the MS-SSIM indicator, our algorithm has a slower growth of MS-SSIM when the BPP is high and has a great advantage over traditional algorithms and other advanced algorithms when the BPP is low. The results show that compared with traditional algorithms and other advanced
+Figure 10. PSNR and MS-SSIM performance test curves of each algorithm. Jiang-2023 is the algorithm proposed in reference [27]. Fu-2023 is the algorithm proposed in reference [28]. Wang-2023 is the algorithm proposed in reference [29]. Lau-2023 is the algorithm proposed in reference [30]. Duan2023 is an algorithm proposed in reference [31]. Al-khassaweneh-2024 is the algorithm proposed in reference [32]. Yang-2024 is the algorithm proposed in reference [33].
+As can be seen from Figure 10, when evaluated by the PSNR indicator, our algorithm shows a relatively stable overall performance. When the BPP is low, it has a more obvious advantage over traditional algorithms and other advanced algorithms, and it still maintains a leading position when the BPP is high. When evaluated by the MS-SSIM indicator, our algorithm has a slower growth of MS-SSIM when the BPP is high and has a great advantage over traditional algorithms and other advanced algorithms when the BPP is low. The results show that compared with traditional algorithms and other advanced algorithms, our algorithm has good performance, better image compression and reconstruction quality, and the overall performance has certain advantages.
+4.8. Ablation Experiment Results Verification
+The key functional modules designed in Section 3 above have different effects on image compression performance, so the ablation comparison experiment is designed in this section to test the actual situation of different key modules on compression efficiency. The experiment includes four test groups and one control group. The specific information is as follows: 1. Replace the content-weighted autoencoder with a normal encoder; 2. Replace the importance map network with a normal feature extraction convolutional network; 3. Replace the binary quantizer with a normal quantizer; 4. Replace the multi-scale discriminator with a general discriminator; 5. A complete network of the high-quality image compression algorithm designed in this paper.
+
+
+Sensors 2024, 24, 6503 16 of 19
+The above five groups of tests are all carried out in the same environment to ensure that there is no interference from other factors. The initial state of the test environment will be restored before each test to ensure the objectivity and fairness of the test results. The test
+results are shown in Table 3, √ indicates that the module has been added and × indicates that the module has not been added. The verification indicators are the original size and compressed size of the image data and the compression relative occupancy rate, which is the ratio of the compressed image data size to the original size. The visualization results of the ablation experiment are shown in Figure 11. Figure 11a shows the visualization results of the image data before and after compression, and Figure 11b shows the visualization results of the image compression relative occupancy rate and compression efficiency.
+Table 3. Test results of image batch file compression.
+No.
+ContentWeighted Autoencoder
+Importance Map
+Binary Quantizer
+Multi-Scale Discriminator
+Compressed Size (Bytes)
+Original Size (Bytes)
+Compression Relative Occupancy
+1 × √ √ √ 504,509,314 632,618,579 0.7975
+2 √ × √ √ 221,275,152 261,585,473 0.8459
+3 √ √ × √ 1,169,481,629 1,308,437,714 0.8938
+4 √ √ √ × 121,733,768 258,074,555 0.4717
+5 √ √ √ √ 156,688,521 435,245,891 0.3600
+the importance map network with a normal feature extraction convolutional network; 3. Replace the binary quantizer with a normal quantizer; 4. Replace the multi-scale discriminator with a general discriminator; 5. A complete network of the high-quality image compression algorithm designed in this paper. The above five groups of tests are all carried out in the same environment to ensure that there is no interference from other factors. The initial state of the test environment will be restored before each test to ensure the objectivity and fairness of the test results. The test results are shown in Table 3, √ indicates that the module has been added and × indicates that the module has not been added. The verification indicators are the original size and compressed size of the image data and the compression relative occupancy rate, which is the ratio of the compressed image data size to the original size. The visualization results of the ablation experiment are shown in Figure 11. Figure 11a shows the visualization results of the image data before and after compression, and Figure 11b shows the visualization results of the image compression relative occupancy rate and compression efficiency.
+Table 3. Test results of image batch file compression.
+No.
+ContentWeighted Autoencoder
+Importance Map
+Binary Quantizer
+Multi-Scale Discriminator
+Compressed Size (Bytes)
+Original Size (Bytes)
+Compression Relative Occupancy 1 × √ √ √ 504,509,314 632,618,579 0.7975 2 √ × √ √ 221,275,152 261,585,473 0.8459 3 √ √ × √ 1,169,481,629 1,308,437,714 0.8938 4 √ √ √ × 121,733,768 258,074,555 0.4717 5 √ √ √ √ 156,688,521 435,245,891 0.3600
+(a) (b)
+Figure 11. Data visualization results of the ablation experiments. (a) Visual results before and after image data compression. (b) Visual results of compression relative occupancy and compression efficiency.
+According to the test results, different key modules can affect the overall image compression quality to varying degrees. Among them, the multi-scale discriminator has the greatest impact on the image compression efficiency, and other modules have relatively low image compression efficiency. Therefore, the effective implementation of high-quality image compression algorithms requires the close cooperation of all key modules. Finally, the designed high-quality image compression algorithm achieves good compression efficiency and can effectively compress a large number of images.
+5. Conclusions
+In this paper, the high-quality image compression algorithm based on unsupervised learning is studied. The traditional image compression algorithm needs preprocessing to obtain prior knowledge, which leads to low compression efficiency and the compressed image losing more details. The existing algorithms typically rely on limited datasets, which
+
+
+Sensors 2024, 24, 6503 17 of 19
+leads to poor generalization performance and unstable operation. In view of the above problems, this paper first constructs the overall network structure of the image high-quality algorithm based on unsupervised learning, proposes a content-weighted convolutional autoencoder network module to achieve image compression based on a smaller bit rate, and uses an importance map network and binary quantizer to reasonably guide the allocation of spatial bits. A generative adversarial network framework based on a multi-scale discriminator is designed to achieve end-to-end training. Through training with different weights, the accuracy distortion of each scale is minimized, thereby generating a higher quality compressed image. Experimental results show that the algorithm performance of the proposed algorithm model on more than Kodak24, Cityscapes, and Urban100 public datasets is better than that of the traditional algorithm JEPG2000 and other mainstream advanced algorithms. Its advantage is that it can better preserve the details, texture, and semantic information of the original image while achieving efficient processing of image compression tasks.
+Author Contributions: Conceptualization, S.H. and B.M.; Data curation, J.Z., B.J. and S.S.; Methodology, S.H. and J.X.; Software, B.J.; Formal analysis, S.H. and B.M.; Investigation, S.S.; System design, B.J. and S.H.; Writing—original draft preparation, S.H., B.M. and J.Z.; Writing—review and editing, S.H., B.M., J.Z. and J.X. All authors have read and agreed to the published version of the manuscript.
+Funding: This research received no funding.
+Institutional Review Board Statement: Not applicable.
+Informed Consent Statement: All participants gave their informed consent.
+Data Availability Statement: The data are available from the authors upon reasonable request.
+Acknowledgments: This research was supported by the Flight Dynamics and Control Laboratory of Beijing Institute of Technology.
+Conflicts of Interest: Author Bo Jin was employed by the company Chongqing Chang’an Wang Jiang Industry Group Co., Ltd. The remaining authors declare that the research was conducted in the absence of any commercial or financial relationships that could be construed as a potential conflict of interest.
+References
+1. Wu, H. Digital media recording and broadcasting classroom using Internet intelligent image positioning and opinion monitoring in communication. Libr. Hi Tech 2024, 42, 427–446. [CrossRef] 2. Aberna, P.; Agilandeeswari, L. Digital image and video watermarking: Methodologies, attacks, applications, and future directions. Multimed. Tools Appl. 2024, 83, 5531–5591. [CrossRef]
+3. Kanuri, V.K.; Hughes, C.; Hodges, B.T. Standing out from the crowd: When and why color complexity in social media images increases user engagement. Int. J. Res. Mark. 2024, 41, 174–193. [CrossRef] 4. Farooq, N.; Selwal, A. Image steganalysis using deep learning: A systematic review and open research challenges. J. Ambient. Intell. Humaniz. Comput. 2023, 14, 7761–7793. [CrossRef]
+5. Noura, H.N.; Azar, J.; Salman, O.; Couturier, R.; Mazouzi, K. A deep learning scheme for efficient multimedia IoT data compression. Wirel. Ad Hoc Netw. 2023, 138, 102998. [CrossRef] 6. Berger, D.S.; Ernst, D.; Li, H.; Zardoshti, P.; Shah, M.; Rajadnya, S.; Lee, S.; Hsu, L.; Agarwal, I.; Hill, M.D.; et al. Design tradeoffs in CXL-based memory pools for public cloud platforms. IEEE Micro 2023, 43, 30–38. [CrossRef] 7. Zhang, Z.; Zhu, L. A review on unmanned aerial vehicle remote sensing: Platforms, sensors, data processing methods, and applications. Drones 2023, 7, 398. [CrossRef] 8. Li, D.; Wang, M.; Yang, F.; Dai, R. Internet intelligent remote sensing scientific experimental satellite LuoJia3-01. Geo-Spat. Inf. Sci. 2023, 26, 257–261. [CrossRef] 9. Yang, Y.; Mandt, S.; Theis, L. An introduction to neural data compression. Found. Trends Comput. Graph. Vis. 2023, 15, 113–200. [CrossRef] 10. Windhager, J.; Zanotelli, V.R.T.; Schulz, D.; Meyer, L.; Daniel, M.; Bodenmiller, B.; Eling, N. An end-to-end workflow for multiplexed image processing and analysis. Nat. Protoc. 2023, 18, 3565–3613. [CrossRef] 11. Gao, X.; Mou, J.; Banerjee, S.; Zhang, Y. Color-gray multi-image hybrid compression–encryption scheme based on BP neural network and knight tour. IEEE Trans. Cybern. 2023, 53, 5037–5047. [CrossRef] [PubMed]
+
+
+Sensors 2024, 24, 6503 18 of 19
+12. Zhang, W.; Zhang, H.; Ma, H.; Shao, H.; Wang, N.; Leung, V.C. Predictive and adaptive deep coding for wireless image transmission in semantic communication. IEEE Trans. Wirel. Commun. 2023, 22, 5486–5501. [CrossRef] 13. Lokumarambage, M.U.; Gowrisetty, V.S.S.; Rezaei, H.; Sivalingam, T.; Rajatheva, N.; Fernando, A. Wireless end-to-end image transmission system using semantic communications. IEEE Access 2023, 11, 37149–37163. [CrossRef] 14. Balakumar, P.; Wawage, P.S.; Mishra, V.; Yadav, D.; Manchoori, S.; Minhas, D. An Evaluation of Digital Image Sampling and Quantization for Serial and Parallel Image Processing. In Proceedings of the 2023 International Conference on Emerging Research in Computational Science (ICERCS), Coimbatore, India, 7–9 December 2023; pp. 1–8. 15. Elakkiya, S.; Thivya, K.S. Comprehensive review on lossy and lossless compression techniques. J. Inst. Eng. Ser. B 2022, 103, 1003–1012. [CrossRef] 16. Altamimi, A.; Ben Youssef, B. Lossless and Near-Lossless Compression Algorithms for Remotely Sensed Hyperspectral Images. Entropy 2024, 26, 316. [CrossRef] 17. Yang, Y.; Cheng, M.; Ding, Y.; Zhang, W. A visually meaningful image encryption scheme based on lossless compression spiht coding. IEEE Trans. Serv. Comput. 2023, 16, 2387–2401. [CrossRef] 18. Abramova, V.; Lukin, V.; Abramov, S.; Kryvenko, S.; Lech, P.; Okarma, K. A fast and accurate prediction of distortions in DCT-based lossy image compression. Electronics 2023, 12, 2347. [CrossRef] 19. Khuhawar, F.Y.; Bari, I.; Ijaz, A.; Iqbal, A.; Gillani, F.; Hayat, M. Comparative analysis of lossy image compression algorithms. Pak. J. Sci. Res. 2023, 3, 136–147.
+20. Li, F.; Abramov, S.; Dohtiev, I.; Lukin, V. Advantages and drawbacks of two-step approach to providing desired parameters in lossy image compression. Adv. Inf. Syst. 2024, 8, 57–63. 21. Kryvenko, S.; Lukin, V.; Vozel, B. Lossy Compression of Single-channel Noisy Images by Modern Coders. Remote Sens. 2024, 16, 2093. [CrossRef] 22. Bisen, T.; Javed, M.; Nagabhushan, P.; Watanabe, O. Segmentation-less extraction of text and non-text regions from jpeg 2000 compressed document images through partial and intelligent decompression. IEEE Access 2023, 11, 20673–20687. [CrossRef] 23. Ungureanu, V.I.; Negirla, P.; Korodi, A. Image-Compression Techniques: Classical and “Region-of-Interest-Based” Approaches Presented in Recent Papers. Sensors 2024, 24, 791. [CrossRef] [PubMed] 24. Zhang, X.; Wu, X. LVQAC: Lattice Vector Quantization Coupled with Spatially Adaptive Companding for Efficient Learned Image Compression. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, Vancouver, BC, Canada, 17–24 June 2023; pp. 10239–10248. 25. Agustsson, E.; Minnen, D.; Toderici, G.; Mentzer, F. Multi-Realism Image Compression with a Conditional Generator. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, Vancouver, BC, Canada, 17–24 June 2023; pp. 22324–22333. 26. Bai, Y.; Liu, X.; Wang, K.; Ji, X.; Wu, X.; Gao, W. Deep Lossy Plus Residual Coding for Lossless and Near-Lossless Image Compression. IEEE Trans. Pattern Anal. Mach. Intell. 2024, 46, 3577–3594. [CrossRef] [PubMed] 27. Jiang, S.; Yuan, H.; Li, S.; Mao, X. Fourier Series and Laplacian Noise-Based Quantization Error Compensation for End-to-End Learning-Based Image Compression. In Proceedings of the 2023 IEEE International Conference on Image Processing (ICIP), Kuala, Lumpur, Malaysia, 8–11 October 2023; pp. 2975–2979. 28. Fu, H.; Liang, F.; Liang, J.; Li, B.; Zhang, G.; Han, J. Asymmetric Learned Image Compression with Multi-Scale Residual Block, Importance Scaling, and Post-Quantization Filtering. IEEE Trans. Circuits Syst. Video Technol. 2023, 33, 4309–4321. [CrossRef] 29. Wang, Z.; Wang, Z.; Zeng, C.; Yu, Y.; Wan, X. High-Quality Image Compressed Sensing and Reconstruction with Multi-scale Dilated Convolutional Neural Network. Circuits Syst. Signal Process 2023, 42, 1593–1616. [CrossRef] 30. Lau, S.L.; Lim, J.; Chong, E.K.; Wang, X. Single-pixel image reconstruction based on block compressive sensing and convolutional neural network. Int. J. Hydromechatronics 2023, 6, 258–273. [CrossRef] 31. Duan, Z.; Lu, M.; Ma, Z.; Zhu, F. Lossy Image Compression with Quantized Hierarchical VAEs. In Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision (WACV), Waikoloa, HI, USA, 2–7 January 2023; pp. 198–207. 32. Al-khassaweneh, M.; AlShorman, O. Frei-Chen bases based lossy digital image compression technique. Appl. Comput. Inform. 2024, 20, 105–118. [CrossRef] 33. Yang, R.; Mandt, S. Lossy image compression with conditional diffusion models. Adv. Neural Inf. Process. Syst. 2024, 36, 64971–64995. 34. Lu, Z.; Chen, Y. Single image super-resolution based on a modified U-net with mixed gradient loss. Signal Image Video Process. 2022, 16, 1143–1151. [CrossRef] 35. Feng, Y.; Zhang, Y.; Zhou, Z.; Huang, P.; Liu, L.; Liu, X.; Kang, J. Memristor-based storage system with convolutional autoencoderbased image compression network. Nat. Commun. 2024, 15, 1132. [CrossRef] 36. Zhao, D.; Zhu, X.; Zhang, Z.; Arun, P.V.; Cao, J.; Wang, Q.; Zhou, H.; Jiang, H.; Hu, J.; Qian, K. Hyperspectral video target tracking based on pixel-wise spectral matching reduction and deep spectral cascading texture features. Signal Process. 2023, 209, 109033. [CrossRef] 37. Wu, K.; Liu, Q.; Yap, K.H.; Yang, Y. High dimensional optical data—Varifocal multiview imaging, compression and evaluation. Opt. Express 2023, 31, 39483–39499. [CrossRef] [PubMed] 38. Alhoraibi, L.; Alghazzawi, D.; Alhebshi, R. Generative Adversarial Network-Based Data Augmentation for Enhancing Wireless Physical Layer Authentication. Sensors 2024, 24, 641. [CrossRef] [PubMed]
+
+
+Sensors 2024, 24, 6503 19 of 19
+39. Liu, Z.; Hu, J.; Liu, Y.; Roy, K.; Yuan, X.; Xu, J. Anomaly-based intrusion on IoT networks using AIGAN—A generative adversarial network. IEEE Access 2023, 11, 91116–91132. [CrossRef] 40. Xiang, J.; Tohidypour, H.R.; Wang, Y.; Nasiopoulos, P.; Pourazad, M.T. A deep learning-based no-reference quality metric for high-definition images compressed with HEVC. IEEE Trans. Broadcast. 2023, 69, 779–789. [CrossRef] 41. Liu, S.; Huang, Y.; Yang, H.; Liang, Y.; Liu, W. End-to-end image compression method based on perception metric. Signal Image Video Process. 2022, 16, 1803–1810. [CrossRef] 42. Prodan, M.; Vlăsceanu, G.V.; Boiangiu, C.A. Comprehensive evaluation of metrics for image resemblance. J. Inf. Syst. Oper. Manag. 2023, 17, 161–185. 43. Xu, J.; Yang, J.; Kimishima, F.; Taniguchi, I.; Zhou, J. Compressive Sensing Based Image Codec With Partial Pre-Calculation. IEEE Trans. Multimed. 2023, 26, 4871–4883. [CrossRef]
+Disclaimer/Publisher’s Note: The statements, opinions and data contained in all publications are solely those of the individual author(s) and contributor(s) and not of MDPI and/or the editor(s). MDPI and/or the editor(s) disclaim responsibility for any injury to people or property resulting from any ideas, methods, instructions or products referred to in the content.

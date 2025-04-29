@@ -1,0 +1,565 @@
+Diffusion-based Perceptual Neural Video Compression with Temporal Diffusion Information Reuse
+Wenzhuo Ma and Zhenzhong Chen*
+School of Remote Sensing and Information Engineering, Wuhan University
+Abstract
+Recently, foundational diffusion models have attracted considerable attention in image compression tasks, whereas their application to video compression remains largely unexplored. In this article, we introduce DiffVC, a diffusion-based perceptual neural video compression framework that effectively integrates foundational diffusion model with the video conditional coding paradigm. This framework uses temporal context from previously decoded frame and the reconstructed latent representation of the current frame to guide the diffusion model in generating high-quality results. To accelerate the iterative inference process of diffusion model, we propose the Temporal Diffusion Information Reuse (TDIR) strategy, which significantly enhances inference efficiency with minimal performance loss by reusing the diffusion information from previous frames. Additionally, to address the challenges posed by distortion differences across various bitrates, we propose the Quantization Parameter-based Prompting (QPP) mechanism, which utilizes quantization parameters as prompts fed into the foundational diffusion model to explicitly modulate intermediate features, thereby enabling a robust variable bitrate diffusion-based neural compression framework. Experimental results demonstrate that our proposed solution delivers excellent performance in both perception metrics and visual quality.
+1 INTRODUCTION
+With the rise of the digital age, multimedia content, especially video, has become a major component of internet traffic. Consequently, for more efficient transmission and storage, video compression technology has become a research focus. Over the past few decades, traditional coding standards such as AVC [1], HEVC [2] and VVC [3] have been developed and widely adopted. Recently, learning-based neural video compression (NVC) has shown remarkable performance, with methods like DCVC-DC [4] and DCVC-FM [5] outperforming the best traditional codec ECM. Most NVC methods are optimized for the trade-off between bitrate and pixel-level distortion (such as mean squared error). However, Blau et al. [6] demonstrate that pixellevel distortion does not correspond to human visual perception. In other words, reconstruction results with lower pixel-level distortion can still appear blurry and unrealistic, particularly at lower bitrates.
+Perceptual video compression seeks to optimize for rateperception trade-off, producing more realistic outcomes. Previously, perceptual video compression approaches fall into two main categories: one [7] uses perceptual loss functions (e.g. LPIPS [8]) during training to enhance perceptual quality while the others [9, 10, 11, 12, 13] rely on GAN-based frameworks to leverage the generative capabilities of GANs [14] for detailrich reconstructions. Recently, the development of foundational diffusion models (e.g. Stable Diffusion [15]) has opened new possibilities for perception-oriented compression. These foundational diffusion models, trained on thousands of high-quality image-text pairs, can generate high-quality, clear images. Some methods [16, 17, 18, 19, 20, 21] have applied foundational diffusion models to image compression tasks, leveraging their powerful generative capabilities to achieve significant improvements
+Corresponding author: Zhenzhong Chen, E-mail:zzchen@ieee.org
+in visual perception of reconstructed results. This naturally inspires the idea of incorporating foundational diffusion models into video compression frameworks to produce reconstructed videos with high perceptual quality.
+Incorporating foundational diffusion models into video compression tasks presents three main challenges:
+(1) Develop a framework for effectively integrating foundational diffusion models into the state-of-the-art conditional coding paradigm for video compression.
+(2) The iterative nature of diffusion model inference introduces high latency. If each frame requires numerous diffusion steps, the resulting delay is unacceptable for video applications. Therefore, efficient inference strategies are crucial for using diffusion models in video compression.
+(3) Variable bitrate is a key feature of video codecs, yet distortion levels of latent representations vary across bitrates, posing a challenge for diffusion models. Therefore, enabling diffusion models to perceive and adapt to distortion variations of latent representations is one of the key challenges in achieving robust variable bitrate functionality for diffusion-based video compression methods.
+To effectively integrate foundational diffusion models into a conditional coding framework, we propose a perceptual neural video compression framework based on diffusion model, named DiffVC, which uses temporal context extracted from the previous decoded frame and reconstructed latent representations decoded from the bitstream of the current frame as conditions to guide the diffusion model in generating high-quality results. To accelerate inference, we propose an efficient inference strategy based on temporal diffusion information reuse. Given the substantial correlation between consecutive video frames, the current frame can partially reuse diffusion information from the
+arXiv:2501.13528v1 [cs.CV] 23 Jan 2025
+
+
+previous frames, thereby significantly expediting the inference process. Specifically, the diffusion process for each P-frame is divided into two stages: the first stage reuses diffusion information from the previous frames for rapid processing, while the second stage employs conventional diffusion steps to reconstruct high-quality details. Experimental results show that this temporal diffusion information reuse strategy reduces inference time by 47%, with only a 1.96% perceptual performance loss. This significant improvement in inference speed is achieved with minimal trade-offs. To address distortion differences across various bitrates, we employ a simple but effective quantization parameter-based prompting mechanism to modulate the diffusion model. Specifically, we feed the quantization parameters generated by the compression model as prompts to the foundational diffusion model. By leveraging the diffusion model’s ability to interpret semantic information and applying targeted fine-tuning, this mechanism enables the diffusion-based video compression network to adapt effectively to distortions across different bitrates. Extensive experiments demonstrate that DiffVC excels in perception metrics and visual quality. Notably, the proposed DiffVC achieves state-of-the-art performance across all test datasets for the DISTS [22] metric. Benefiting from the temporal diffusion information reuse strategy and the quantization parameter-based prompting mechanism, DiffVC achieves efficient inference and robust variable bitrate functionality with a single model.
+Our contributions are summarized as follows:
+• We propose DiffVC, a diffusion-based perceptual neural video compression framework. It integrates the foundational diffusion model with the conditional coding paradigm by using temporal context from the previously decoded frame and reconstructed latent representations from the current frame’s bitstream as conditions to generate high-quality results.
+• We introduce an efficient inference strategy based on temporal diffusion information reuse, which achieves a significant improvement in inference speed with minimal perceptual performance degradation.
+• We introduce a quantization parameter-based prompting mechanism that explicitly modulates the diffusion model using quantization parameters as prompts, enabling DiffVC to roboustly support variable bitrates.
+• Experimental results on several datasets demonstrate that DiffVC delivers remarkable performance in perception metrics and visual quality, particularly achieving optimal performance across all datasets for the DISTS metric.
+2 Related Work
+2.1 Neural Video Compression
+With the impressive performance of deep neural networks in image compression tasks [23, 24, 25, 26, 27, 28, 29, 30] , learningbased neural video compression has been widely researched. Existing neural video compression methods can be roughly categorized into three types: residual coding-based, 3D autoencoderbased, and conditional coding-based. Residual coding-based methods [31, 32, 33, 11, 34, 35] first generate a predicted frame
+based on the previously decoded frame, and then encode the residue between the current frame and the predicted frame. Lu et al. [31] proposed the first neural video compression method, which is residual coding-based. This approach uses traditional codecs as a template, replacing all of their modules with neural networks and jointly training them in an end-to-end manner. However, the residual coding-based approach, which merely reduces inter-frame redundancy through simple subtraction operation, is not thorough and is suboptimal. The 3D autoencoderbased methods [36, 37, 38] extend the autoencoder in image compression tasks by treating video as multiple images with a temporal dimension, but it introduces significant encoding delays and substantially increases memory costs. The conditional coding-based methods [12, 39, 7, 40, 41, 42, 4, 5] extract contextual information from the previously decoded frame in the feature domain and uses it as a condition to assist the encoder, decoder, and entropy model during encoding and decoding. Conditional coding-based methods achieve superior compression performance by avoiding constraints on the context to the pixel domain, allowing them to learn richer context and eliminate inter-frame redundancy. The well-known DCVC series [40, 41, 42, 4, 5] adopts the conditional coding-based paradigm, with DCVC-DC [4] and DCVC-FM [5] even surpassing the best traditional codec ECM.
+2.2 Perceptual Video Compression
+Although neural video compression methods have shown excellent performance in pixel-level distortion metrics, the work by Blau et al. [6] demonstrates the existence of a "rate-distortionperception" trade-off, suggesting that better perceptual quality at a fixed rate often corresponds to greater distortion. As a result, perception-oriented neural video compression has attached significant attention. The work of [7] incorporated perceptual loss terms, such as Learned Perceptual Image Patch Similarity (LPIPS) [8], into the rate-distortion loss functions, optimizing for visual quality. Additionally, some methods leverage the powerful generative capabilities of Generative Adversarial Network (GAN) [14] to develop neural video codecs that can produce realistic, high-perceptual-quality reconstruction results. Mentzer et al. [9] pioneered the introduction of GANs into neural video compression, which treats the compression network as a generator. Through the adversarial process with a discriminator, the network learns to reconstruct videos with rich details. Zhang et al. [10] introduced a discriminator and hybrid loss function based on DVC [31] to help the network trade off rate, distortion and perception. Yang et al. [11] introduced a recurrent conditional GAN, which consists of a recurrent generator and a recurrent discriminator conditioned on the latent representations generated during compression, resulting in remarkable perceptual quality outcomes. To address the issue of poor reconstruction quality in newly emerged areas and the presence of checkerboard artifacts in GAN-based methods, Li et al. [12] designed a confidencebased feature reconstruction method, combined with a periodic compensation loss function, which further improves the visual quality of the reconstructed video. Du et al. [13] proposed a contextual generative video compression method with transformers, named CGVC-T, which employs GAN to enhance perceptual quality and utilizes contextual coding to improve compression efficiency.
+2
+
+
+2.3 Diffusion-based Compression
+Recently, benefiting from the application of pre-trained foundational diffusion models (such as Stable Diffusion [15]) trained on thousands of high-quality image-text pairs, diffusion-based image compression methods [16, 17, 18, 19, 20, 21] have surpassed GAN-based methods in perception metrics. Lei et al. [18] proposed to only transmit the sketch and text description of the image, then use both as conditions to guide the diffusion model to generate the reconstructed image during decoding. The work by Careil et al. [19] guided the diffusion decoding process using vector-quantized latent representations and image descriptions. Relic et al. [20] treated the removal of quantization noise as a denoising task and employed a parameter estimation module to learn adaptive diffusion steps, which achieved high-quality results with only 2% to 7% of the full diffusion process. Li et al. [21] used compressed latent features with added noise instead of pure noise as the starting point, significantly reducing the number of diffusion steps required for reconstruction and introduced a novel relay residual diffusion process to further enhance reconstruction quality.
+Despite the significant success of diffusion models in image compression, diffusion-based video compression methods have been rarely studied. As discussed earlier, incorporating diffusion models into neural video compression presents three key challenges. First, there is the need to effectively integrate foundational diffusion models into the video compression framework to enhance the perceptual quality of reconstruction without disrupting existing coding paradigms, such as conditional coding. Li et al. [43] proposed a hybrid approach that combines image compression and diffusion models for video compression. However, this fragmented strategy disrupted video coding paradigms, resulting in suboptimal reconstruction performance. Second, the slow inference speed of diffusion-based video compression methods needs to be addressed. For example, the work by Liu et al. [44] proposed a novel diffusion-based video compression framework that integrates different video compression modes (such as AI, LDP, LDB, and RA) into a unified system. However, it faces significant challenges in terms of inference latency. Finally, the varying distortion levels of latent representations across different bitrates pose an additional challenge: enabling a single diffusion model to support inference across multiple bitrates. The proposed DiffVC effectively addresses these three issues, realizing a diffusion-based perceptual neural video compression framework that supports efficient inference and roboust variable bitrate.
+3 Methodology
+3.1 The Framework of DiffVC
+To effectively incorporate the foundational diffusion model within a conditional coding framework, we propose a diffusionbased perceptual neural video compression framework, named DiffVC. DiffVC consists of three main components: Motion Modules, Contextual Modules, and Diffusion Modules. The Motion and Contextual Modules are adapted from DCVC-DC [4]. As shown in Table 1, which defines the primary symbols used in this paper, the original video frames and decoded frames are denoted as {xt}T
+t=1 and {xˆt}T
+t=1, respectively. The overall model
+architecture is depicted in Fig. 1, the details of DiffVC are as
+Table 1: A list of notations mainly used in this paper.
+Symbol Definition t Video frame index. t ∈ [0, T ) n Diffusion timestep. n ∈ [0, N] DS Total number of diffusion steps. D The number of independent diffusion steps. ds Diffusion step index. ds ∈ [0, DS ] xt Original input frame. xˆt Reconstructed frame. mt Estimated motion vector. mˆ t Reconstructed motion vector. yt The latent representation output by E. yˆt Reconstructed latent representation. C ̄t Multi-scale temporal contexts mined from previous decoded frame. ft The feature of reconstructed latent representation yˆt. zn
+t Noisy latent representation of timestep n in the diffusion process.
+zt0 Denoised latent representation of timestep 0 in the diffusion process.
+y ̈n
+t The predicted noise-free latent of timestep n.
+εn Standard Gaussian noise added at timestep n. εn
+θ The noise predicted by U-Net at timestep n.
+qenc The quantization parameter used in Contextual Encoder. qdec The quantization parameter used in Contextual Decoder. ratio The ratio of quantized parameters, that is, QP-based prompt. E The encoder od pre-trained Stable Diffusion V2.1. D The decoder od pre-trained Stable Diffusion V2.1.
+follows:
+Motion Modules. The motion vectors between the previously decoded frame and the current frame are estimated, then encoded and decoded.
+• Motion Estimation: A motion estimation network (Spynet [45]) estimates the optical flow mt between the previously decoded frame xˆt−1 and the current frame xt.
+• MV Encoder / Decoder: The motion vector mt is encoded into the bitstream by an autoencoder and decoded to obtain the reconstructed motion vector mˆ t.
+• MV Entropy Model: For simplicity, the entropy model for the motion vector includes only a hyperprior model and quadtree partition-based entropy coding, without using the latent representation of the previous frame as a prior.
+Contextual Modules. The encoder E of Stable Diffusion V2.1 is first used to transform the current frame xt into the latent representation yt. Then yt is compressed and decompressed with the aid of temporal context mined from reconstructed optical flow mˆ t and the latent representation feature ft−1 of previously decoded frame.
+• Temporal Context Mining: The reconstructed latent representation feature ft−1 of the previously decoded frame is aligned to current frame with the reconstructed motion vector mˆ t. A hierarchical approach is then
+performed to learn multi-scale temporal contexts C ̄t.
+Specifically, two scales of temporal contexts (C ̄t0 and
+C ̄t1) are extracted in DiffVC, which are 1
+8 and 1
+16 of the
+original resolution. It is worth noting that group-based offset diversity in DCVC-DC is not used in DiffVC considering the model complexity.
+• Contextual Encoder / Decoder: With the assistance of
+the temporal contexts C ̄t0 and C ̄t1, the current frame’s latent representation yt is encoded into the bitstream and
+3
+
+
+C
+Add Noise
+ControlNet
+Encoder Decoder
+SD U-Net
+Diffusion Buffer QP-based Prompt Diffuison Modules
+Reuse
+enc dec
+qq
+0
+zt
+N
+zt
+()
+Reuse DS − D
+n
+zt n 1
+zt −
+Independent  D
+Temporal Context Mining
+Contextual Encoder
+Contextual Decoder
+Contextual Entropy Model
+AE AD
+Contextual Modules
+y t yˆ t
+1
+Ct
+0
+Ct
+0
+Ct 1
+Ct
+0
+Ct 1
+Ct
+Motion Estimation
+MV Encoder
+MV Decoder
+MV Entropy Model
+AE AD
+Motion Modules
+mt
+mˆ t
+Frame and Feature Buffer
+xˆt−1
+ft
+ft −1
+xt
+
+xˆ t
+Figure 1: The framework of DiffVC. DiffVC consists of three main components: Motion Modules, Contextual Modules, and Diffusion Modules. The Motion Modules (green) manage motion vector estimation and compression. The Contextual Modules (red) focus on extracting temporal context and compressing conditional residues. Finally, the Diffusion Modules (blue) apply multiple diffusion steps to generate high perceptual-quality reconstructions. The components E and D represent the pre-trained autoencoder of Stable Diffusion V2.1. The Frame and Feature Buffer stores the previous decoded frame and its latent representation feature, while the Diffusion Buffer stores diffusion information from the previous frame.
+reconstructed as yˆt. Notably, since the yt has already been downsampled by a factor of 8, the Contextual Encoder / Decoder only applies a 2× downsampling, ensuring the representation to be written into bitstream is 1
+16 of the original resolution.
+• Contextual Entropy Model: The entropy model in the contextual modules employs hyperprior model and quadtree partition-based entropy coding, with the small
+scale temporal context C ̄t1 and the latent representation decoded from the previous frame’s bitstream as priors.
+The Motion and Contextual Modules enable the conditional compression of video frames. The key challenge lies in integrating the foundational diffusion model into the conditional coding paradigm. Unlike diffusion-based image compression, where only the decoded latent representations serve as conditions to guide the diffusion model in generating the reconstructed result, diffusion-based video compression can exploit prior information from previously decoded frames due to the high redundancy between video frames. In the conditional coding paradigm, the Contextual Modules already extract rich, multi-level contextual information from the feature domain of previously decoded frames to assist in encoding and decoding the current frame.
+This "ready-made" contextual information can be reused to guide the diffusion model in reconstructing the current frame. By leveraging this approach, we seamlessly integrate the conditionguided foundational diffusion model into the conditional coding paradigm, enabling a conditional diffusion-based video compression framework. Specifically, the details of the Diffusion Modules in DiffVC are as follows:
+Diffusion Modules: This modules begin by adding Gaussian noise over N steps to the reconstructed latent representation yˆt,
+resulting in an initial diffusion state zN
+t . The diffusion process
+then applies the proposed temporal diffusion information reuse strategy to produce the denoised representation zt0, which will be detailed in Section 3.2. Finally, the decoder D of Stable Diffusion V2.1 reconstructs the frame xˆt with high perceptual quality.
+• Noise Estimation: The U-Net from Stable Diffusion V2.1 serves as the noise estimation network in DiffVC.
+• Conditional Guidance: In DiffVC, the noised latent representation zn
+t at the current timestep, the reconstructed latent representation yˆt of the current frame,
+and the larger scale temporal context C ̄t0 mined from previously decoded frame are concatenated and used
+4
+
+
+Independent Diffusion
+Reuse Diffusion
+n1
+zt −
+U-Net
+n
+zt
+Diffusion Buffer
+Posterior Sample
+n
+yt
+1
+n
+yt −
+n
+yt
+( )( )
+( )( )
+11
+1 2
+11 11 11 1
+n n nn nn tt
+nn
+nn
+n
+yz
+  
+  
+
+−−
+−
+−−
+=+
+−− −−
+=−
+Diffusion Timesteps (n)
+Video Frames (t)
+()
+Reuse  DS − D Independent  D
+c ratio
+Diffusion Buffer
+...
+U-Net
+t2 2
+N
+zt 
+1 2
+N
+zt −
+
+2 2
+N
+zt −
+
+0
+zt 2
+1
+zt 2
+2
+zt 2
+Diffusion Buffer
+...
+U-Net
+t=2 2
+z2 1
+z2 0
+z2
+2
+zN 1
+2
+zN− 2
+2
+zN−
+...
+U-Net
+1
+zN 1
+1
+zN− 0
+z1
+2 1
+zN−
+t =1 2
+z1 1
+z1
+n 
+1
+nn nt
+n
+n
+t
+z
+y
+
+
+−−
+=
+Figure 2: Temporal Diffusion Information Reuse Strategy. The left panel illustrates the inference process of TDIR, where the vertical axis represents video frames and the horizontal axis represents diffusion timesteps. The first P frame undergoes independent diffusion for DS steps, while subsequent P frames reuse diffuse for DS − D steps before undergoing independent diffusion for the remaining D steps. The right panel provides details on the independent diffusion step (red) and reuse diffusion step (green).
+as conditional input to ControlNet [46], which guides the U-Net network in noise estimation.
+• QP-based Prompt: To enable the U-Net to recognize distortion variations across bitrates, the quantization parameters (qenc and qdec) used in the Contextual Encoder and Decoder are provided to the U-Net as prompts. This modulation is achieved through cross-attention layers, allowing the U-Net to adaptively adjust based on bitrate-dependent distortion levels. The details are presented in Section 3.3.
+Overall, the DiffVC framework tightly integrates the conditional coding framework with the foundational diffusion model by using contextual information as a bridge, leveraging the powerful prior knowledge of the diffusion model to reconstruct high-quality results with excellent perceptual fidelity. Notably, since the conditions guiding the diffusion model include both the current frame’s information (yˆt) and the information from
+previously decoded frames (C ̄t0), the diffusion model can more comprehensively account for video continuity during reconstruction, rather than merely recovering the current frame.
+3.2 Temporal Diffusion Information Reuse Strategy
+Following DDPM [47], DiffVC obtains the noisy latent zn
+t by
+adding Gaussian noise with variance βn ∈ (0, 1) to the latent yˆt reconstructed by the Contextual Decoder:
+zn
+t=√
+α ̄ nyˆt + √
+1 − α ̄ nεn, n = 0, 1, 2, ..., N (1)
+where n ∈ [0, N] is diffusion timestep, t ∈ [0, T ) is video frame index, εn ∈ N(0, I) is standard Gaussian noise, βn is a fixed constant that increases as n increases, αn = 1 − βn and α ̄ n =
+Qn
+i=1 αn. When n approaches N (very large), the noisy latent zn
+t
+is nearly a standard Gaussian distribution.
+In conventional diffusion processes, the noisy latent representation undergoes multiple diffusion steps to produce the final denoised latent representation, which is then decoded to generate the reconstruction. However, applying this process to video compression tasks results in unacceptable inference latency due to the need for multiple iterations per frame. Fortunately, unlike standalone images, consecutive video frames share substantial
+temporal correlation, allowing the reuse of diffusion information across frames. Based on this idea, we propose a Temporal Diffusion Information Reuse (TDIR) strategy, which significantly accelerates the inference process for diffusion models in video compression with only a minimal loss in perceptual quality.
+Overview. TDIR utilizes two diffusion modes: Independent Diffusion and Reuse Diffusion (illustrated in Fig. 2, with the left panel showing the overall inference flow, the top-right corner depicting independent diffusion, and the bottom-right corner illustrating reuse diffusion). Assume each P frame requires a total of DS diffusion steps, of which D steps are independent diffusion, and the remaining DS −D steps involve reuse diffusion. For the first P frame in each Group of Pictures, the process exclusively employs independent diffusion (D = DS ). For subsequent P frames, the process starts with DS − D reuse diffusion steps, followed by D independent diffusion steps (D =
+1
+2 DS in DiffVC).
+Independent Diffusion. At each independent diffusion step, the noisy latent zn
+t is used as input. As described in Section
+3.1, the noisy latent zn
+t , the reconstructed latent yˆt and the large
+scale temporal context C ̄t0 are concatenated together to form the condition c. Under the guidance of the specific condition c and the QP-based prompt ratio (detailed in Section 3.3), the U-Net predicts the noise εn
+θ for the current timestep.
+c = concat(zn
+t , yˆt, C ̄0
+t) εn
+θ = Unet(zn
+t , c, ratio) (2)
+Subsequently, based on Eq. 1, we derive Eq. 3, which enables the prediction of the noise-free latent y ̈n
+t for the current timestep.
+y ̈n
+t = zn
+t−
+√
+1 − α ̄ nεn
+θ
+√α ̄ n (3)
+Then, the mean μ and variance σ of the posterior distribution for the current timestep are calculated using y ̈n
+t and zn
+t:
+μ=
+√
+α ̄ n−1(1 − αn)
+1 − α ̄ n y ̈n
+t + (1 − α ̄ n−1) √αn
+1 − α ̄ n zn
+t
+σ2 = (1 − αn)(1 − α ̄ n−1)
+1 − α ̄ n
+(4)
+5
+
+
+Q KV
+Q KV
+Q KV
+Q KV
+/
+CAP
+enc
+q
+dec
+q ratio
+CLIP Text Encoder
+/ division
+CAP channel average pooling
+SD U-Net Q
+K V cross-attention layer
+tokens
+frozen
+Figure 3: QP-based Prompting Mechanism. The ratio of the quantization parameters, qenc and qdec, in the Contextual Encoder/Decoder, is averaged channel-wise and encoded into tokens using the pretrained CLIP Text Encoder. These tokens are then used to modulate the intermediate features of the U-Net via cross-attention layers. The visualization in the top-right corner illustrates the relationship between the quantization parameter ratio and the bitrate, with the test data being the BQMall sequence from HEVC Class C.
+Finally, posterior sampling is conducted to obtain the latent ztn−1 for timestep n − 1:
+zn−1
+t ∼ N(μ, σ2 I) (5)
+where I is identity matrix. This completes a single independent diffusion step. However, since noise prediction relies on the highly complex and parameter-intensive U-Net network, the independent diffusion mode is relatively slow.
+Reuse Diffusion. Owing to the temporal correlation between video frames, the predicted noise-free latents y ̈n
+t at correspond
+ing timesteps in the diffusion processes of adjacent frames are highly similar (as shown in Fig. 8). Leveraging this, the Reuse Diffusion mode accelerates the diffusion process for the current frame by reusing the predicted noise-free latents from the previous frame. Specifically, during the diffusion process of (t − 1)-th frame, the predicted noise-free latents y ̈n
+t−1 at each
+timestep are stored in the Diffusion Buffer. When reconstructing the t-th frame, the corresponding y ̈n
+t−1 is retrieved directly
+from the Diffusion Buffer as the predicted noise-free latent y ̈n
+t
+for the current frame, instead of being predicted by the U-Net network. Similar to Independent Diffusion, the mean and variance of the posterior distribution are then computed, followed by posterior sampling to obtain the latent ztn−1 for the next timestep.
+In contrast to Independent Diffusion, Reuse Diffusion mode bypasses the time-consuming U-Net network and relies solely on a straightforward posterior sampling operation, achieving exceptionally fast diffusion speeds with minimal time consumption.
+In summary, the TDIR strategy enhances the inference speed of DiffVC by reducing the number of U-Net computations through the reuse of diffusion information. It is worth noting that the high perceptual quality achieved by diffusion models is primarily attributed to their iterative sampling process, where fewer sampling steps typically lead to degraded perceptual quality (as shown in Fig. 9a). However, the TDIR strategy does not reduce the total number of sampling steps. Even during reuse diffusion, it still performs posterior sampling by reusing the
+predicted noise-free latent from the previous frame, ensuring minimal perceptual quality loss (approximately 1.96%) while reducing inference time by 47% (detailed results can be found in the Section 4.3.2). Furthermore, conventional diffusion model acceleration techniques (e.g. DDIM [48], better start strategy) can be seamlessly integrated with the TDIR strategy for further speed improvements. Notably, the TDIR strategy is also applicable to other diffusion-based video tasks, such as video generation.
+3.3 QP-based Prompting Mechanism
+Variable bitrate is a fundamental feature of video codecs and is essential for practical applications. In DiffVC, the variable bitrate solution builds on DCVC-DC by introducing quantization parameters (qenc and qdec) in the Contextual Encoder/Decoder to scale latent representations. However, the distortion levels vary significantly across different bitrate points, resulting in notable differences in the distributions of latent representations. Employing a single diffusion model to recover latent representations across all bitrate points often yields suboptimal results. A straightforward solution is to train a separate diffusion model for each bitrate point. However, this is impractical due to the large parameter size of the foundation diffusion model, which incurs prohibitively high training costs. Moreover, such a strategy undermines the very concept of variable bitrate encoding. To resolve this, we propose a QP-based Prompting mechanism (QPP) that enables a single diffusion model to support all bitrate points, thereby achieving robust variable bitrate in diffusion-based video compression.
+Stable Diffusion, originally developed for text-to-image generation, is trained on a large dataset of text-image pairs, giving it a robust understanding of diverse prompts. It is intuitive to leverage Stable Diffusion’s built-in semantic understanding to make it explicitly aware of bitrate variations. As shown in Fig. 3, QPP adopts a simple yet effective approach to achieve this.
+6
+
+
+Table 2: Training strategy of our proposed diffusion-based video compression scheme.
+Stage Tainable Modules λ Epoch lr milestones lr list Loss
+1 Motion 384 5 [0] [10−4] LD
+motion
+2 Contextual 384 5 [0] [10−4] LD
+contextual
+3 Motion 384 8 [0] [10−4] LRD
+motion
+4 Contextual 384 8 [0] [10−4] LRD
+contextual
+5 Motion+Contextual 384 5 [0,2,3,4] [10−4,5 × 10−5,10−5,5 × 10−6] LcRoDmpress
+6 Motion+Contextual 16,48,128,384 20 [0,8,12,16,18] [10−4,5 × 10−5,10−5,5 × 10−6,10−6] LcRoDmPpress
+7 Motion+Contextual 16,48,128,384 10 [0,4,7,9] [5 × 10−5,10−5,5 × 10−6,10−6] LRDPcas
+com pre s s
+8 Diffusion 16,48,128,384 50 [0,30,38,45,48] [5 × 10−5,2.5 × 10−5,10−5,5 × 10−6,10−6] Ldi f f usion
+Specifically, qenc and qdec are quantization parameters in the Contextual Encoder/Decoder that control variable bitrates. Their ratio, averaged along the channel dimension, provides a value that characterizes bitrate changes (illustrated by the curve in the top-right corner of Fig. 3, which demonstrates the proportional relationship between this ratio and the bitrate). This ratio is then treated as a prompt and encoded into tokens by the pre-trained CLIP Text Encoder [49]:
+tokens = CLIP(CAP( qenc
+qdec
+)) (6)
+where CLIP denotes the pretrained CLIP Text Encoder and CAP represents channel-wise average pooling. These tokens are used to modulate the intermediate features of the U-Net through cross-attention layers, enabling the diffusion model to explicitly perceive distortion variations across different bitrates.
+While Stable Diffusion is capable of interpreting semantic information, it does not inherently associate the QP-based prompt with the distortion variations in the latent representation. To address this limitation, we employ targeted training by finetuning the diffusion model using a mixed bitrate approach. This fine-tuning enables the diffusion model to establish a robust correspondence between the QP-based prompt and the distortion characteristics of the latent representation (details are provided in the next section).
+3.4 Training Strategy
+To ensure comprehensive training of each module in DiffVC, we adopt a multi-stage training strategy. The specifics of this strategy are outlined in Table 2. As described in Section 3.1, DiffVC comprises three main components: Motion, Contextual, and Diffusion modules. The training process is divided into eight distinct stages, with each stage utilizing tailored loss functions to target specific modules. The details of each stage are as follows:
+• Stage 1: The Motion Modules are trained at the highest bitrate. As described in Eq. 7, LD
+motion calculates the
+distortion between the warped frame xˇt and the input frame xt, enabling the Motion Modules to reconstruct high-fidelity motion vector.
+LD
+motion = wt · λ · D(xt, xˇt) (7)
+• Stage 2: The Contextual Modules are trained at the highest bitrate. As described in Eq. 8, LD
+contextual cal
+culates the distortion between the reconstructed frame xˆt and xt, enabling the Contextual Modules learn to generate high-fidelity results. LD
+contextual = wt · λ · D(xt, xˆt) (8)
+• Stage 3: The Motion Modules are further trained at the highest bitrate using the rate-distortion loss LRD
+motion,
+which incorporates both the bitrate of motion vector mt
+and the distortion loss LD
+motion. LRD
+motion = R(mt) + wt · λ · D(xt, xˇt) (9)
+• Stage 4: The Contextual Modules are trained at the highest bitrate using the rate-distortion loss LRD
+contextual,
+which accounts for both the bitrate of latent representation yt and the distortion loss LD
+contextual. LRD
+contextual = R(yt) + wt · λ · D(xt, xˆt) (10)
+• Stage 5: Both the Motion and Contextual Modules are jointly trained at the highest bitrate. The rate-distortion loss LcRoDmpress, defined in Eq. 11, extends LRD
+contextual by
+incorporating the bitrate of mt, enabling joint optimization of the entire compression network.
+LRD
+compress = R(mt) + R(yt) + wt · λ · D(xt, xˆt) (11)
+• Stage 6: The Motion and Contextual Modules are trained across all bitrate levels. The rate-distortionperception loss LcRoDmPpress, defined in Eq. 12, extends
+LcRoDmpress by incorporating a VGG-based loss term to improve the perceptual quality of the reconstructed results.
+LRDP
+compress =R(mt) + R(yt)+
+wt · λ · (D(xt, xˆt) + wp · VGG(xt, xˆt)) (12)
+• Stage 7: The trainable modules are the same as Stage 6. Following [42], this stage employs a cascade training strategy. LRDPcas
+compress calculates the average RateDistortion-Perception (RDP) loss across T frames, effectively mitigating the accumulation of errors.
+LRDPcas
+compress = 1
+T
+T X
+t
+(R(mt) + R(yt) + wt · λ · (D(xt, xˆt)+
+wp · VGG(xt, xˆt))) (13)
+7
+
+
+Figure 4: The rate-perception/distortion curves of our proposed DiffVC and other video compression methods on the HEVC dataset. Solid lines with dots represent traditional codecs, solid lines with triangles denote distortion-oriented neural video compression methods, dashed lines with circles indicate GAN-based neural video compression methods, and solid lines with circles correspond to Diffusion-based neural video compression methods.
+• Stage 8: Train the Diffusion Modules across all bitrate levels. During this stage, the ControlNet is fully trainable, while only the attention layers of the U-Net (approximately 15% of the total weights) are fine-tuned. As described in Eq. 14, Ldi f f usion employs the commonly used MSE loss for diffusion models. Additionally, to enable the diffusion model to interpret QP-based prompts, the corresponding prompt for each bitrate level is provided during each training step.
+Ldi f f usion = MS E(εn, εn
+θ ) (14)
+We use λ to balance the trade-off between bitrate and quality (distortion and perception). Additionally, following [4], we introduce a periodically varying weight, wt, to mitigate error propagation. And wp represents the weight of the perceptual loss term. It is important to note that throughout the training process, both the encoder E and the decoder D remain fixed and are not involved in training.
+4 Experiments
+4.1 Experimental Setup
+Datasets For training, we use the widely adopted Vimeo-90k dataset [50], which is commonly used for video compression research. This dataset comprises 89,800 video clips containing diverse real-world motions, with each clip consisting of seven consecutive frames. To comprehensively evaluate the performance of our proposed video compression framework, we employ HEVC [2], UVG [51] and MCL-JCV [52] as test datasets. These datasets include video resolutions of 416×240,
+832×480, 1280×720, and 1920×1080, providing a diverse range of scenes for comprehensive evaluation.
+Training Settings As outlined in Section 3.4, we employ a multi-stage training strateg. To support variable bitrate with a single model, we define four λ values (16, 48, 128, 384) to balance bitrate and reconstruction quality. Following [4], the periodically varying weights wt for four consecutive frames are set to (0.5, 1.2, 0.5, 0.9). The perceptual loss weight wp is set to 0.025. Training is performed with a batch size of 8, and, as is common in video compression methods, sequences are randomly cropped to a resolution of 256×256. The Adam optimizer is used with β1 = 0.9 and β2 = 0.999. The learning
+rate is initialized at 1 × 10−4 and the specific learning rate decay strategy during training is detailed in columns 5 and 6 of Table 2. All experiments are implemented in PyTorch and conducted using NVIDIA GTX 3090 GPUs.
+Test Settings Following [42, 41, 4], we evaluate the first 96 frames of each video sequence, with the intra-period set to 32. The low-delay encoding configuration is used, and HIFIC [53] is employed to encode I frames. For the diffusion model, the total diffusion steps (DS ) is set to 50, while the independent diffusion steps (D) in TDIR is set to 25. All evaluations are conducted in the RGB color space.
+Compared Methods We conduct a comprehensive comparison of the proposed DiffVC with various available video compression methods, including traditional reference software: JM-19.0 [54], HM-16.25 [55] and VTM-17.0 [56]; distortionoriented neural video compression methods: DCVC [40],
+8
+
+
+Figure 5: The rate-perception/distortion curves of our proposed DiffVC and other video compression methods on the MCL-JCV dataset. Solid lines with dots represent traditional codecs, solid lines with triangles denote distortion-oriented neural video compression methods, dashed lines with circles indicate GAN-based neural video compression methods, and solid lines with circles correspond to Diffusion-based neural video compression methods.
+Figure 6: The rate-perception/distortion curves of our proposed DiffVC and other video compression methods on the UVG dataset. Solid lines with dots represent traditional codecs, solid lines with triangles denote distortion-oriented neural video compression methods, dashed lines with circles indicate GAN-based neural video compression methods, and solid lines with circles correspond to Diffusion-based neural video compression methods.
+DCVC-TCM [42], DCVC-HEM [41], DCVC-DC [4] and DCVC-FM [5]; GAN-based perceptual neural video compres
+sion methods: DVC-P [10] and PLVC [11]; and diffusion-based perceptual neural video compression method: EVC-PDM [43].
+9
+
+
+Table 3: BD-rate↓ (%) / BD-metric↑ for different methods on HEVC, MCL-JCV and UVG dataset. The anchor is VTM-17.0.
+Dataset Methods Perception Distortion
+DISTS LPIPS KID NIQE PSNR MS-SSIM
+HEVC
+JM-19.0 176.3 / -0.0384 165.0 / -0.0547 150.9 / -0.0354 76.0 / -0.3532 219.8 / -3.4148 259.8 / -0.0254 HM-16.25 0.7 / -0.0002 17.6 / -0.0088 -17.0 / 0.0056 -39.5 / 0.2806 37.8 / -0.9235 33.0 / -0.0057 VTM-17.0 0.0 / 0.0000 0.0 / 0.0000 0.0 / 0.0000 0.0 / 0.0000 0.0 / 0.0000 0.0 / 0.0000 DCVC 283.4 / -0.0532 186.0 / -0.0647 191.3 / -0.0531 140.6 / -0.6306 129.6 / -2.4412 83.2 / -0.0112 DCVC-TCM 105.8 / -0.0249 53.1 / -0.0201 67.9 / -0.0188 81.8 / -0.3897 38.7 / -0.9163 10.2 / -0.0015 DCVC-HEM 53.9 / -0.0140 9.2 / -0.0040 31.0 / -0.0091 54.8 / -0.2843 -0.3 / -0.0097 -15.3 / 0.0019 DCVC-DC 25.2 / -0.0073 -7.0 / 0.0029 15.4 / -0.0049 19.2 / -0.1135 -19.8 / 0.5900 -28.5 / 0.0042 DCVC-FM 21.0 / -0.0063 -7.3 / 0.0032 13.5 / -0.0045 21.0 / -0.1224 -16.4 / 0.4788 -23.3 / 0.0036 DVC-P 122.9 / -0.0278 195.2 / -0.0609 75.3 / -0.0167 1.6 / 0.0385 359.0 / -4.2982 241.0 / -0.0211 PLVC -27.1 / 0.0110 -66.9 / 0.0518 -47.3 / 0.0216 -48.2 / 0.5238 262.4 / -3.7475 120.0 / -0.0209 DiffVC -79.0 / 0.0391 -64.8 / 0.0401 -75.8 / 0.0281 N/A / 0.8849 N/A / -6.4813 N/A / -0.0453
+MCL-JCV
+JM-19.0 167.5 / -0.0322 188.8 / -0.0604 190.5 / -0.0134 59.8 / -0.3221 333.2 / -3.3522 315.7 / -0.0215 HM-16.25 0.6 / -0.0001 23.7 / -0.0118 -2.6 / 0.0003 -14.2 / 0.1046 40.2 / -0.7545 37.5 / -0.0049 VTM-17.0 0.0 / 0.0000 0.0 / 0.0000 0.0 / 0.0000 0.0 / 0.0000 0.0 / 0.0000 0.0 / 0.0000 DCVC 419.1 / -0.0584 269.1 / -0.0665 211.9 / -0.0152 221.5 / -0.8732 99.8 / -1.4660 83.8 / -0.0075 DCVC-TCM 190.5 / -0.0328 124.3 / -0.0378 125.7 / -0.0087 88.7 / -0.4180 24.9 / -0.4232 24.5 / -0.0024 DCVC-HEM 128.7 / -0.0249 79.3 / -0.0270 93.4 / -0.0069 47.6 / -0.2600 -10.9 / 0.2178 -1.3 / -0.0000 DCVC-DC 95.8 / -0.0208 56.6 / -0.0213 64.0 / -0.0053 27.4 / -0.1681 -22.3 / 0.4831 -10.4 / 0.0011 DCVC-FM 90.2 / -0.0210 58.5 / -0.0224 67.8 / -0.0061 9.5 / -0.0607 -16.1 / 0.3549 -7.0 / 0.0008 DVC-P 160.8 / -0.0334 236.5 / -0.0753 186.6 / -0.0117 48.6 / -0.2384 465.4 / -3.8693 388.0 / -0.0214 PLVC -67.6 / 0.0300 N/A / 0.0857 -58.3 / 0.0082 – / 0.6759 384.6 / -3.9255 296.0 / -0.0247 DiffVC N/A / 0.0556 N/A / 0.0868 -52.5 / 0.0054 -78.8 / 0.6902 N/A / -6.3123 509.2 / -0.0296
+UVG
+JM-19.0 171.1 / -0.0285 182.7 / -0.0582 166.0 / -0.0053 -19.6 / 0.1257 363.0 / -3.3050 339.1 / -0.0274 HM-16.25 -16.1 / 0.0048 3.6 / -0.0014 -5.7 / 0.0005 -33.5 / 0.1992 36.0 / -0.6329 29.2 / -0.0046 VTM-17.0 0.0 / 0.0000 0.0 / 0.0000 0.0 / 0.0000 0.0 / 0.0000 0.0 / 0.0000 0.0 / 0.0000 DCVC 527.7 / -0.0552 326.3 / -0.0710 248.9 / -0.0076 263.9 / -0.6372 143.1 / -1.7526 125.2 / -0.0121 DCVC-TCM 165.7 / -0.0237 94.8 / -0.0300 126.9 / -0.0036 50.5 / -0.1728 22.4 / -0.3524 27.2 / -0.0032 DCVC-HEM 112.3 / -0.0178 62.1 / -0.0215 90.5 / -0.0026 32.6 / -0.1210 -14.0 / 0.2809 0.4 / -0.0002 DCVC-DC 89.4 / -0.0160 43.5 / -0.0168 85.3 / -0.0031 3.8 / -0.0182 -25.8 / 0.5460 -11.6 / 0.0015 DCVC-FM 95.1 / -0.0181 38.1 / -0.0151 65.9 / -0.0030 -12.3 / 0.0578 -20.4 / 0.4366 -8.1 / 0.0011 DVC-P 199.4 / -0.0325 226.3 / -0.0728 306.0 / -0.0080 -0.8 / 0.0186 528.6 / -4.0096 434.7 / -0.0274 PLVC N/A / 0.0336 N/A / 0.0873 -66.4 / 0.0045 N/A / 0.8133 568.5 / -4.2150 374.9 / -0.0284 DiffVC N/A / 0.0464 -78.6 / 0.0722 -27.4 / 0.0020 N/A / 0.7705 N/A / -5.5030 486.3 / -0.0330
+* Red and Blue indicate the best and the second-best performance, respectively. ’N/A’ indicates that BD-rate cannot be calculated due to the lack of overlap. ’–’ indicates that BD-rate cannot be calculated because the rate-NIQE curve is not monotonic.
+For JM, HM, and VTM, we use the encoder_baseline, encoder_lowdelay_main_rext and encoder_lowdelay_vtm configurations, QP values for the four bitrate points are 22, 27, 32, and 37. For DVC-P, we retrain the model according to its training procedure, as its pre-trained model is not available, and follow the original intra-period of 10. For PLVC, we also set the intra-period to 9 as specified in the original paper. For EVCPDM, which only supports video inputs with a resolution of 128×128, we align its test conditions as described in Section 4.2 and compare it with our method.
+Evaluation Metrics To quantitatively evaluate performance, we use several established metrics to assess the quality of the reconstructed videos. For distortion metrics, we adopt Peak Signal-to-Noise Ratio (PSNR) and Multi-Scale Structural Similarity Index Measure (MS-SSIM) [57] to evaluate the fidelity of the reconstructed results. For perceptual metrics, we use the reference Learned Perceptual Image Patch Similarity (LPIPS) [8], Deep Image Structure and Texture Similarity (DISTS) [22], Kernel Inception Distance (KID) [58], and the non-reference Natural Image Quality Evaluator (NIQE) [59] to comprehensively measure the perceptual quality of the reconstructed outputs. Finally, we use Bit Per Pixel (BPP) to measure the bits cost for encoding one pixel in each frame.
+4.2 Experimental Results
+Perception Metric Evaluation Fig. 4, 5 and 6 present the rate-perception/distortion curves for various video compression methods on the HEVC, MCL-JCV, and UVG datasets, respectively. In each figure, the first and second columns evaluate reconstruction quality using perception metrics, while the last column assesses it using distortion metrics. Table 3 further reports the BD-rate and BD-metric for all metrics, with VTM-17.0 as the anchor. Since the perception metrics used in this paper follow a lower-is-better convention, their values are negated during the calculation of BD-rate and BD-metric for clarity. Consequently, smaller BD-rate values and larger BD-metric values indicate better performance. Experimental results demonstrate that the proposed DiffVC consistently outperforms all traditional and distortion-oriented neural video compression methods in perception metrics. Compared to GAN-based methods, DiffVC achieves superior results across most perception metrics, particularly excelling in the DISTS metric. For example, on the HEVC dataset, DiffVC significantly outperforms PLVC in the DISTS, KID and NIQE metrics, while ranking second in LPIPS with a minimal gap of only 2.1%. Overall, DiffVC exhibits exceptional performance in perception metrics.
+10
+
+
+Figure 7: Visual results of traditional codec VTM-17.0, distortion-oriented codec DCVC-FM, GAN-based codec PLVC and diffusion-based DiffVC (ours).
+Visual Results This section presents the visual quality of reconstructed results from different video compression methods. Four representative methods from distinct video compression categories are selected for a comprehensive comparison: the traditional codec VTM-17.0, the distortion-oriented neural codec DCVC-FM, the GAN-based neural codec PLVC, and our proposed diffusion-based neural codec DiffVC. Fig. 7 shows the reconstruction results from these methods, using four video sequences from HEVC Class C: BasketballDrill, PartyScene, RaceHorses and BQMall. A detailed comparison focusing on the floor in BasketballDrill, the doll’s head and carpet in PartyScene, the horse’s tail and mane in RaceHorses and the textures on the wall in BQMall reveals that our proposed DiffVC produces a more detailed and visually appealing reconstruction at a lower bitrate, outperforming the other methods.
+Complementary Comparison Similar to DiffVC, EVC-PDM is a diffusion-based perceptual video compression method that combines image compression with diffusion models to achieve high perceptual quality in extreme scenarios. Since EVC-PDM only supports inputs with a resolution of 128×128, this section aligns the testing conditions to compare DiffVC with EVCPDM. We selected the Class D subset from the HEVC dataset, which contains videos with the smallest resolution. Following [43], we center-cropped and downsampled the original frames
+Table 4: BD-rate↓ (%) for DiffVC on the HEVC_ClassD_128 dataset. The anchor is EVC-PDM.
+Methods Perception Distortion
+DISTS LPIPS KID NIQE PSNR SSIM
+DiffVC -78.2 -78.4 -86.6 N/A -68.7 -61.8
+* ’N/A’ indicates that BD-rate cannot be calculated due to the lack of overlap.
+to 128×128 resolution to serve as both input and ground truth, denoted as HEVC_ClassD_128. Table 4 summarizes the BDrate for DiffVC, with EVC-PDM as the anchor. Notably, SSIM is used instead of MS-SSIM, as the latter cannot be computed at a resolution of 128×128 when the gaussian kernel size is set to the default value of 11. Across both perceptual and distortion metrics, DiffVC consistently outperforms EVC-PDM.
+4.3 Ablation Study
+To validate the effectiveness of the proposed modules, we conducted comprehensive ablation experiments. Table 5 summarizes the results, evaluating the BD-rate for four perception metrics and the decoding time.
+11
+
+
+Table 5: The ablation study of our proposed DiffVC. We provide the BD-rate↓ (%) for perception metrics and Decoding Time (seconds) for a 480p frame. All results are tested on HEVC Class C. The anchor is DiffVC.
+Method Diffusion TDIR QPP DISTS LPIPS KID NIQE Average Decoding Time (s)
+A % % % 25.76 71.40 216.99 – – 0.1933 B ! % % -0.60 -0.03 6.34 -5.72 0.00 7.5414 C ! ! % 3.70 3.48 5.84 7.35 5.09 4.0127 D ! % ! -3.19 -2.93 3.59 -5.31 -1.96 7.5503 DiffVC ! ! ! 0.00 0.00 0.00 0.00 0.00 4.0018
+* Decoding Time refers to the time required to decode a P frame, as the decoding time for I frame is not the focus of this paper. ’–’ indicates that BD-rate cannot be calculated because the rate-NIQE curve is not monotonic.
+Figure 8: The average cosine similarity of predicted noise-free latent y ̈n
+t between adjacent frames across different diffusion step
+index (ds) when total number of diffusion steps (DS ) is set to 50.
+4.3.1 Effectiveness of the Diffusion Model
+A comparison of Methods A and B in Table 5 underscores the critical role of the foundational diffusion model in achieving high-quality reconstruction results. When the diffusion model is not employed (Method A), maintaining the same reconstruction quality requires an increase in bitrate by 26.36%, 71.43%, and 210.65% for the DISTS, LPIPS and KID metrics, respectively. Furthermore, at the same bitrate, the NIQE metric deteriorates by 0.029. This advantage stems from the foundational diffusion model’s pretraining on a vast dataset of high-quality text-image pairs, equipping it with the capability to produce superior results. By leveraging these robust priors, DiffVC achieves exceptional performance in perceptual quality.
+4.3.2 Effectiveness of the TDIR strategy
+The primary challenge for diffusion-based video compression methods lies in their significant inference delay. The TDIR strategy significantly accelerates DiffVC’s inference speed by reusing diffusion information from the previous frame. A comparison between Method D and DiffVC in Table 5 reveals that applying the TDIR strategy reduces inference time by 47%, with only a minimal perceptual performance loss of 1.96%. Considering the considerable improvement in inference speed, this slight performance trade-off is deemed acceptable.
+4.3.3 Effectiveness of the QPP mechanism
+In a variable bitrate model, the differences in latent distributions across bitrates make directly employing the diffusion model to recover noisy latent representations suboptimal. To address this, we leverage the foundational diffusion model’s inherent semantic understanding by using quantization parameters as prompts
+to explicitly modulate the intermediate features of the U-Net. This mechanism enables the diffusion model to adaptively reconstruct latent representations with varying levels of distortion across different bitrates, achieving optimal performance. The comparison between Method C and DiffVC in Table 5 demonstrates the effectiveness of the QPP mechanism. For perception metrics, the QPP mechanism achieves an average bitrate saving of 5.09% at the same reconstruction quality. For distortion metrics, it also provides a 5.23% bitrate saving (6.50% for PSNR and 3.95% for MS-SSIM).
+4.3.4 Discussion on the TDIR strategy
+Temporal Correlation of Diffusion Information. Fig. 8 demonstrates the high temporal correlation of predicted noise-free latent y ̈n
+t across video frames at different diffusion steps, with cosine similarity consistently exceeding 0.86. This correlation arises from the significant redundancy between video frames, forming the basis for reusing the preticted noise-free latent of previous frames in the TDIR strategy. Moreover, the correlation decreases as the diffusion step index ds increases, justifying the use of reuse-based diffusion in the initial 25 steps to accelerate inference, followed by independent diffusion in later 25 steps to restore frame details.
+Influence of DS and D. Fig. 9a shows the perceptual performance of the proposed method under different total diffusion steps (DS ). The results indicate that perceptual performance degrades progressively as DS decreases. Fig. 9b presents the perceptual performance under different independent diffusion steps (D). It reveals that perceptual performance remains stable when D ≥ 25, but drops sharply when D < 15.
+12
+
+
+(a) (b)
+Figure 9: Influence of DS and D. Subfigure (a) illustrates the variation in perceptual BD-rate across different total diffusion steps (DS ), with DiffVC as the anchor. Subfigure (b) shows the changes in perceptual BD-rate under different independent diffusion steps (D) while maintaining DS = 50, also using DiffVC as the anchor.
+Table 6: Speed of Different Diffusion Modes. Diffusion Time (seconds) refers to the time consumed for a single diffusion step with a 480p video frame as input.
+Diffusion Mode Diffuison Time (s)
+Reuse Diffusion 0.00034 (100%) Independent Diffusion 0.14154 (41675%)
+This is because insufficient independent diffusion steps fail to recover frame-specific details, and excessive reuse of prior frame diffusion information leads to significant error accumulation. In conclusion, DiffVC adopts a configuration of DS = 50 and D = 25.
+Speed of Different Diffusion Modes. Table 6 presents the speeds of two different diffusion modes in the TDIR strategy. Independent diffusion is over 400 times slower than reuse diffusion. Independent diffusion relies on a large and highly complex UNet network to estimate noise, resulting in significantly slower inference speeds. In contrast, reuse diffusion bypasses the U-Net network by reusing diffusion information from previous frames and performs only a simple post-sampling operation, enabling much faster inference. This explains why the TDIR strategy achieves efficient diffusion.
+5 Conclusions
+In this paper, we propose a diffusion-based perceptual neural video compression framework, named DiffVC. This framework effectively integrates the foundational diffusion model into a conditional coding paradigm, leveraging reconstructed latent representation of the current frame and contextual information
+mined from previous frames to guide the diffusion model in generating high-perceptual-quality reconstructions. To address the high inference latency inherent in diffusion-based methods, we introduce the TDIR strategy, which significantly accelerates inference by reusing diffusion information from previous frames. Due to the strong temporal correlation between video frames and the robustness of the foundational diffusion model, the performance loss caused by TDIR is minimal. Additionally, to enable the framework to roboustly support variable bitrates, we propose the QPP mechanism. By utilizing quantization parameters as prompts to explicitly modulate features within the U-Net, the diffusion model adapts to distortion variations in latent representations across different bitrates. Extensive experiments conducted on several test datasets demonstrate the effectiveness of our proposed framework.
+Appendix
+A PARAMETER SETTINGS
+The detailed settings of JM, HM, and VTM are as follows.
+• JM
+lencod.exe -d encoder_baseline.cfg -p InputFile=input_path -p OutputFile=bin_path -p SourceWidth=width -p SourceHeight=height -p FrameRate=fps -p FramesToBeEncoded=96 -p IntraPeriod=32 -p ProfileIDC=66 -p YUVFormat=1 -p SourceBitDepthLuma=8 -p SourceBitDepthChroma=8 -p QPISlice=28 -p QPPSlice=28
+• HM
+TAppEncoderStatic -c encoder_lowdelay_main_rext.cfg –InputFile=input_path –BitstreamFile=bin_path
+13
+
+
+–DecodingRefreshType=2 –InputBitDepth=8 –OutputBitDepth=8 –OutputBitDepthC=8 –InputChromaFormat=444 –FrameRate=fps –FramesToBeEncoded=96 –SourceWidth=width –SourceHeight=height –IntraPeriod=32 –QP=qp –Level=6.2
+• VTM
+EncoderAppStatic -c encoder_lowdelay_vtm.cfg –InputFile=input_path –BitstreamFile=bin_path –DecodingRefreshType=2 –InputBitDepth=8 –OutputBitDepth=8 –OutputBitDepthC=8 –InputChromaFormat=444 –FrameRate=fps –FramesToBeEncoded=96 –SourceWidth=width –SourceHeight=height –IntraPeriod=32 –QP=qp –Level=6.2
+References
+[1] Thomas Wiegand, Gary J. Sullivan, Gisle Bjøntegaard, and Ajay Luthra. Overview of the H.264/AVC video coding standard. IEEE Transactions on Circuits and Systems for Video Technology, 13(7):560–576, 2003.
+[2] Gary J. Sullivan, Jens-Rainer Ohm, Woojin Han, and Thomas Wiegand. Overview of the high efficiency video coding (HEVC) standard. IEEE Transactions on Circuits and Systems for Video Technology, 22(12):1649–1668, 2012.
+[3] Benjamin Bross, Ye-Kui Wang, Yan Ye, Shan Liu, Jianle Chen, Gary J. Sullivan, and Jens-Rainer Ohm. Overview of the versatile video coding (VVC) standard and its applications. IEEE Transactions on Circuits and Systems for Video Technology, 31(10):3736–3764, 2021.
+[4] Jiahao Li, Bin Li, and Yan Lu. Neural video compression with diverse contexts. In IEEE/CVF Conference on Computer Vision and Pattern Recognition, pages 22616–22626, 2023.
+[5] Jiahao Li, Bin Li, and Yan Lu. Neural video compression with feature modulation. In IEEE/CVF Conference on Computer Vision and Pattern Recognition, pages 2609926108, 2024.
+[6] Yochai Blau and Tomer Michaeli. Rethinking lossy compression: The rate-distortion-perception tradeoff. In Proceedings of International Conference on Machine Learning, volume 97, pages 675–685, 2019.
+[7] Chenming Xu, Meiqin Liu, Chao Yao, Weisi Lin, and Yao Zhao. IBVC: interpolation-driven b-frame video compression. Pattern Recognition, 153:110465, 2024.
+[8] Richard Zhang, Phillip Isola, Alexei A. Efros, Eli Shechtman, and Oliver Wang. The unreasonable effectiveness of deep features as a perceptual metric. In IEEE/CVF Conference on Computer Vision and Pattern Recognition, pages 586–595, 2018.
+[9] Fabian Mentzer, Eirikur Agustsson, Johannes Ballé, David Minnen, Nick Johnston, and George Toderici. Neural video compression using gans for detail synthesis and propagation. In European Conference on Computer Vision, volume 13686, pages 562–578, 2022.
+[10] Saiping Zhang, Marta Mrak, Luis Herranz, Marc Górriz Blanch, Shuai Wan, and Fuzheng Yang. DVC-P: deep video compression with perceptual optimizations. In International Conference on Visual Communications and Image Processing, pages 1–5. IEEE, 2021.
+[11] Ren Yang, Radu Timofte, and Luc Van Gool. Perceptual learned video compression with recurrent conditional GAN. In Proceedings of International Joint Conference on Artificial Intelligence, pages 1537–1544, 2022.
+[12] Meng Li, Yibo Shi, Jing Wang, and Yunqi Huang. High visual-fidelity learned video compression. In Proceedings of ACM International Conference on Multimedia, pages 8057–8066, 2023.
+[13] Pengli Du, Ying Liu, and Nam Ling. CGVC-T: contextual generative video compression with transformers. IEEE Journal on Emerging and Selected Topics in Circuits and Systems, 14(2):209–223, 2024.
+[14] Ian J. Goodfellow, Jean Pouget-Abadie, Mehdi Mirza, Bing Xu, David Warde-Farley, Sherjil Ozair, Aaron C. Courville, and Yoshua Bengio. Generative adversarial nets. In Advances in Neural Information Processing Systems, pages 2672–2680, 2014.
+[15] Robin Rombach, Andreas Blattmann, Dominik Lorenz, Patrick Esser, and Björn Ommer. High-resolution image synthesis with latent diffusion models. In IEEE/CVF Conference on Computer Vision and Pattern Recognition, pages 10674–10685, 2022.
+[16] Zhihong Pan, Xin Zhou, and Hao Tian. Extreme generative image compression by learning text embedding from diffusion models. arXiv, abs/2211.07793, 2022.
+[17] Ruihan Yang and Stephan Mandt. Lossy image compression with conditional diffusion models. In Advances in Neural Information Processing Systems, 2023.
+[18] Eric Lei, Yigit Berkay Uslu, Hamed Hassani, and Shirin Saeedi Bidokhti. Text + sketch: Image compression at ultra low rates. arXiv, abs/2307.01944, 2023.
+[19] Marlène Careil, Matthew J. Muckley, Jakob Verbeek, and Stéphane Lathuilière. Towards image compression with perfect realism at ultra-low bitrates. In International Conference on Learning Representations, 2024.
+[20] Lucas Relic, Roberto Azevedo, Markus Gross, and Christopher Schroers. Lossy image compression with foundation diffusion models. arXiv, abs/2404.08580, 2024.
+[21] Zhiyuan Li, Yanhui Zhou, Hao Wei, Chenyang Ge, and Ajmal Mian. Diffusion-based extreme image compression with compressed feature initialization. arXiv, abs/2410.02640, 2024.
+[22] Keyan Ding, Kede Ma, Shiqi Wang, and Eero P. Simoncelli. Image quality assessment: Unifying structure and texture similarity. IEEE Transactions on Pattern Analysis and Machine Intelligence, 44(5):2567–2581, 2022.
+[23] Johannes Ballé, Valero Laparra, and Eero P. Simoncelli. End-to-end optimized image compression. In International Conference on Learning Representations, 2017.
+[24] Johannes Ballé, David Minnen, Saurabh Singh, Sung Jin Hwang, and Nick Johnston. Variational image compression
+14
+
+
+with a scale hyperprior. In International Conference on Learning Representations, 2018.
+[25] David Minnen, Johannes Ballé, and George Toderici. Joint autoregressive and hierarchical priors for learned image compression. In Advances in Neural Information Processing Systems, pages 10794–10803, 2018.
+[26] Zhengxue Cheng, Heming Sun, Masaru Takeuchi, and Jiro Katto. Learned image compression with discretized gaussian mixture likelihoods and attention modules. In IEEE/CVF Conference on Computer Vision and Pattern Recognition, pages 7936–7945, 2020.
+[27] Dailan He, Yaoyan Zheng, Baocheng Sun, Yan Wang, and Hongwei Qin. Checkerboard context model for efficient learned image compression. In IEEE/CVF Conference on Computer Vision and Pattern Recognition, pages 1477114780, 2021.
+[28] Dailan He, Ziming Yang, Weikun Peng, Rui Ma, Hongwei Qin, and Yan Wang. ELIC: efficient learned image compression with unevenly grouped space-channel contextual adaptive coding. In IEEE/CVF Conference on Computer Vision and Pattern Recognition, pages 5708–5717, 2022.
+[29] Jinming Liu, Heming Sun, and Jiro Katto. Learned image compression with mixed transformer-cnn architectures. In IEEE/CVF Conference on Computer Vision and Pattern Recognition, pages 14388–14397, 2023.
+[30] Jing Zhao, Bin Li, Jiahao Li, Ruiqin Xiong, and Yan Lu. A universal optimization framework for learning-based image codec. ACM Transactions on Multimedia Computing, Communications, and Applications, 20(1):16:1–16:19, 2024.
+[31] Guo Lu, Wanli Ouyang, Dong Xu, Xiaoyun Zhang, Chunlei Cai, and Zhiyong Gao. DVC: an end-to-end deep video compression framework. In IEEE/CVF Conference on Computer Vision and Pattern Recognition, pages 1100611015, 2019.
+[32] Zhihao Hu, Guo Lu, and Dong Xu. FVC: A new framework towards deep video compression in feature space. In IEEE/CVF Conference on Computer Vision and Pattern Recognition, pages 1502–1511, 2021.
+[33] Guo Lu, Xiaoyun Zhang, Wanli Ouyang, Li Chen, Zhiyong Gao, and Dong Xu. An end-to-end learning framework for video compression. IEEE Transactions on Pattern Analysis and Machine Intelligence, 43(10):3292–3308, 2021.
+[34] Huairui Wang, Zhenzhong Chen, and Chang Wen Chen. Learned video compression via heterogeneous deformable compensation network. IEEE Transactions on Multimedia, 26:1855–1866, 2024.
+[35] Jiayu Yang, Chunhui Yang, Fei Xiong, Yongqi Zhai, and Ronggang Wang. Learned video compression with adaptive temporal prior and decoded motion-aided quality enhancement. ACM Transactions on Multimedia Computing, Communications, and Applications, 20(8):238:1–238:21, 2024.
+[36] AmirHossein Habibian, Ties van Rozendaal, Jakub M. Tomczak, and Taco Cohen. Video compression with ratedistortion autoencoders. In IEEE/CVF International Conference on Computer Vision, pages 7032–7041, 2019.
+[37] Wenyu Sun, Chen Tang, Weigui Li, Zhuqing Yuan, Huazhong Yang, and Yongpan Liu. High-quality singlemodel deep video compression with frame-conv3d and multi-frame differential modulation. In European Conference on Computer Vision, volume 12375, pages 239–254, 2020.
+[38] Vijay Veerabadran, Reza Pourreza, AmirHossein Habibian, and Taco Cohen. Adversarial distortion for learned video compression. In IEEE/CVF Conference on Computer Vision and Pattern Recognition, pages 640–644, 2020.
+[39] Huairui Wang and Zhenzhong Chen. Exploring long- and short-range temporal information for learned video compression. IEEE Transactions on Image Processing, 33: 780–792, 2024.
+[40] Jiahao Li, Bin Li, and Yan Lu. Deep contextual video compression. In Advances in Neural Information Processing Systems, pages 18114–18125, 2021.
+[41] Jiahao Li, Bin Li, and Yan Lu. Hybrid spatial-temporal entropy modelling for neural video compression. In ACM International Conference on Multimedia, pages 1503–1511, 2022.
+[42] Xihua Sheng, Jiahao Li, Bin Li, Li Li, Dong Liu, and Yan Lu. Temporal context mining for learned video compression. IEEE Transactions on Multimedia, 25:7311–7322, 2023.
+[43] Bohan Li, Yiming Liu, Xueyan Niu, Bo Bai, Lei Deng, and Deniz Gündüz. Extreme video compression with pretrained diffusion models. arXiv, abs/2402.08934, 2024.
+[44] Meiqin Liu, Chenming Xu, Yukai Gu, Chao Yao, and Yao Zhao. I2vc: A unified framework for intra- & inter-frame video compression. arXiv, abs/2405.14336, 2024.
+[45] Anurag Ranjan and Michael J. Black. Optical flow estimation using a spatial pyramid network. In IEEE/CVF Conference on Computer Vision and Pattern Recognition, pages 2720–2729, 2017.
+[46] Lvmin Zhang, Anyi Rao, and Maneesh Agrawala. Adding conditional control to text-to-image diffusion models. In IEEE/CVF International Conference on Computer Vision, pages 3813–3824, 2023.
+[47] Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. In Advances in Neural Information Processing System, 2020.
+[48] Jiaming Song, Chenlin Meng, and Stefano Ermon. Denoising diffusion implicit models. In International Conference on Learning Representations, 2021.
+[49] Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, Gretchen Krueger, and Ilya Sutskever. Learning transferable visual models from natural language supervision. In Proceedings of International Conference on Machine Learning, volume 139, pages 8748–8763, 2021.
+[50] Tianfan Xue, Baian Chen, Jiajun Wu, Donglai Wei, and William T. Freeman. Video enhancement with taskoriented flow. International Journal of Computer Vision, 127(8):1106–1125, 2019.
+15
+
+
+[51] Alexandre Mercat, Marko Viitanen, and Jarno Vanne. UVG dataset: 50/120fps 4k sequences for video codec analysis and development. In Proceedings of ACM Multimedia Systems Conference, pages 297–302, 2020.
+[52] Haiqiang Wang, Weihao Gan, Sudeng Hu, Joe Yuchieh Lin, Lina Jin, Longguang Song, Ping Wang, Ioannis Katsavounidis, Anne Aaron, and C.-C. Jay Kuo. MCL-JCV: A jnd-based H.264/AVC video quality assessment dataset. In IEEE International Conference on Image Processing, pages 1509–1513, 2016.
+[53] Fabian Mentzer, George Toderici, Michael Tschannen, and Eirikur Agustsson. High-fidelity generative image compression. In Advances in Neural Information Processing Systems, 2020.
+[54] JVET. JM-19.0. http://iphome.hhi.de/suehring/, 2022. Accessed: 2022-03-02.
+[55] JVET. HM-16.25. https://vcgit.hhi.fraunhofer. de/jvet/HM/, 2022. Accessed: 2022-11-02.
+[56] JVET. VTM-17.0. https://vcgit.hhi.fraunhofer. de/jvet/VVCSoftware_VTM/, 2022. Accessed: 202211-02.
+[57] Zhou Wang, Eero P Simoncelli, and Alan C Bovik. Multiscale structural similarity for image quality assessment. In Asilomar Conference on Signals, Systems & Computers, volume 2, pages 1398–1402, 2003.
+[58] Mikolaj Binkowski, Danica J. Sutherland, Michael Arbel, and Arthur Gretton. Demystifying MMD gans. In International Conference on Learning Representations, 2018.
+[59] Anish Mittal, Rajiv Soundararajan, and Alan C. Bovik. Making a "completely blind" image quality analyzer. IEEE Signal Processing Letters, 20(3):209–212, 2013.
+16
